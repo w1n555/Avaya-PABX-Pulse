@@ -86,16 +86,21 @@ function setGwStatus(msg) {
     el.hidden = true;
     el.textContent = "";
     el.removeAttribute("title");
+    el.classList.remove("is-updating");
     return;
   }
   el.hidden = false;
   el.textContent = msg;
   el.title = msg;
+  el.classList.toggle("is-updating", /Updat|queued|waiting for OSSI|OSSI busy|Auto update…/i.test(msg));
 }
 
 function paintGwUpdated() {
+  const ts = fmtUpdated(GW.data.lastUpdate);
+  const card = document.getElementById("gw-stat-updated");
+  if (card) card.textContent = ts;
   const el = document.getElementById("gw-meta-updated");
-  if (el) el.textContent = fmtUpdated(GW.data.lastUpdate);
+  if (el) el.textContent = ts;
 }
 
 function normPortKey(port) {
@@ -256,20 +261,23 @@ function renderGwTable() {
 function paintGwCountdown() {
   const el = document.getElementById("gw-countdown");
   const det = document.getElementById("gw-detail-countdown");
-  const setBoth = (txt) => {
-    if (el) el.textContent = txt;
-    if (det) det.textContent = txt;
+  const setBoth = (txt, updating) => {
+    for (const node of [el, det]) {
+      if (!node) continue;
+      node.textContent = txt;
+      node.classList.toggle("is-updating", !!updating);
+    }
   };
   if (!GW.connected) {
-    setBoth("Next: —");
+    setBoth("Next: —", false);
     return;
   }
   if (GW.loading || GW.ossiBusy) {
-    setBoth("Updating…");
+    setBoth("Updating…", true);
     return;
   }
   if (!GW.nextAt) {
-    setBoth("Next: session Auto 90s");
+    setBoth("Next: session Auto 90s", false);
     return;
   }
   const sec = Math.min(
@@ -279,7 +287,7 @@ function paintGwCountdown() {
   const extra = GW.detailMg && !document.getElementById("gw-detail-view")?.hidden
     ? ` · this GW + global`
     : "";
-  setBoth(`Next: ${sec}s${extra}`);
+  setBoth(`Next: ${sec}s${extra}`, false);
 }
 
 export function getOpenGatewayDetailMg() {

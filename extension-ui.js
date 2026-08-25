@@ -137,11 +137,13 @@ function setExtStatus(msg) {
     el.hidden = true;
     el.textContent = "";
     el.removeAttribute("title");
+    el.classList.remove("is-updating");
     return;
   }
   el.hidden = false;
   el.textContent = msg;
   el.title = msg;
+  el.classList.toggle("is-updating", /Updat|queued|waiting for OSSI|OSSI busy|Auto update…/i.test(msg));
 }
 
 function paintExtUpdated() {
@@ -208,21 +210,22 @@ function paintExtSummary() {
   const total = (EXT.data.items || []).length;
   const filtered = filteredExtRows();
   const shown = Math.min(filtered.length, SHOW_CAP);
-  const types = typesFromItems().length;
   const ports = filtered.filter((r) => {
     const p = String(r.port || "").trim();
     return p && p !== "—";
   }).length;
   el.innerHTML = [
-    { k: "Total", v: total },
-    { k: "Matched", v: filtered.length },
-    { k: "Showing", v: shown },
-    { k: "Ports", v: ports },
-    { k: "Types", v: types },
+    { k: "Total", v: total, acc: "green" },
+    { k: "Matched", v: filtered.length, acc: "" },
+    { k: "Showing", v: shown, acc: "" },
+    { k: "Ports", v: ports, acc: "blue" },
+    { k: "Last Update", v: fmtUpdated(EXT.data.lastUpdate), acc: "", ts: true },
   ]
     .map(
-      (it) => `<div class="cdr-kpi"><div class="cdr-kpi-v">${escapeHtml(String(it.v))}</div>
-      <div class="cdr-kpi-k">${escapeHtml(it.k)}</div></div>`
+      (it) => `<div class="map-stat${it.acc ? ` accent-${it.acc}` : ""}">
+        <div class="map-stat-k">${escapeHtml(it.k)}</div>
+        <div class="map-stat-v${it.ts ? " map-stat-v-ts" : ""}">${escapeHtml(String(it.v))}</div>
+      </div>`
     )
     .join("");
 
@@ -270,27 +273,31 @@ function renderExtTable() {
 function paintExtCountdown() {
   const el = document.getElementById("ext-countdown");
   if (!el) return;
+  const set = (txt, updating) => {
+    el.textContent = txt;
+    el.classList.toggle("is-updating", !!updating);
+  };
   if (!EXT.connected) {
-    el.textContent = "Next: —";
+    set("Next: —", false);
     return;
   }
   if (EXT.loading) {
-    el.textContent = "Updating…";
+    set("Updating…", true);
     return;
   }
   if (!EXT.nextAt) {
-    el.textContent = "Next: hourly";
+    set("Next: hourly", false);
     return;
   }
   const sec = Math.max(0, Math.ceil((EXT.nextAt - Date.now()) / 1000));
   if (sec >= 3600) {
     const h = Math.floor(sec / 3600);
     const m = Math.floor((sec % 3600) / 60);
-    el.textContent = `Next: ${h}h ${m}m`;
+    set(`Next: ${h}h ${m}m`, false);
   } else if (sec >= 60) {
-    el.textContent = `Next: ${Math.floor(sec / 60)}m ${sec % 60}s`;
+    set(`Next: ${Math.floor(sec / 60)}m ${sec % 60}s`, false);
   } else {
-    el.textContent = `Next: ${sec}s`;
+    set(`Next: ${sec}s`, false);
   }
 }
 

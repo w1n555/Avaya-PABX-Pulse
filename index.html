@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Avaya PABX Network Monitoring for NOC</title>
   <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="style.css?v=20260821t" />
+  <link rel="stylesheet" href="style.css?v=20260821y" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
   <script>
     // Apply theme before paint (avoid flash)
@@ -62,12 +62,8 @@
           </div>
           <div class="card-actions-col">
             <div class="card-actions">
-              <label class="chk"><input type="checkbox" id="chk-auto" checked /> Auto 90s</label>
               <span class="countdown-line" id="trunk-countdown">Next: —</span>
               <span class="trunk-auto-status" id="trunk-auto-status" hidden></span>
-              <div class="refresh-btn-wrap">
-                <div class="refresh-meta">Updated <span class="v mono" id="meta-updated">—</span></div>
-              </div>
             </div>
             <div class="legend-block">
               <div class="legend">
@@ -81,30 +77,24 @@
         </div>
         <div id="trunk-list-view">
           <div class="map-stat-row trunk-stat-row" id="trunk-summary-kpi" aria-label="Trunk summary">
-            <div class="map-stat" id="trunk-stat-groups-card">
+            <div class="map-stat accent-green" id="trunk-stat-groups-card">
               <div class="map-stat-k">Trunk Groups</div>
               <div class="map-stat-v" id="trunk-stat-groups">—</div>
-              <div class="map-stat-sub">Monitored</div>
+              <div class="map-stat-sub">Healthy / Total</div>
             </div>
-            <div class="map-stat accent-green" id="trunk-stat-healthy-card">
-              <div class="map-stat-k">Healthy</div>
-              <div class="map-stat-v" id="trunk-stat-healthy">—</div>
-              <div class="map-stat-sub">GREEN</div>
-            </div>
-            <div class="map-stat accent-yellow" id="trunk-stat-warn-card">
-              <div class="map-stat-k">Warning</div>
-              <div class="map-stat-v" id="trunk-stat-warn">—</div>
-              <div class="map-stat-sub">70–90%</div>
-            </div>
-            <div class="map-stat accent-red" id="trunk-stat-crit-card">
-              <div class="map-stat-k">Critical</div>
+            <div class="map-stat accent-red">
+              <div class="map-stat-k">Major</div>
               <div class="map-stat-v" id="trunk-stat-crit">—</div>
               <div class="map-stat-sub">&gt;90% / FAILED</div>
             </div>
+            <div class="map-stat accent-yellow">
+              <div class="map-stat-k">Minor</div>
+              <div class="map-stat-v" id="trunk-stat-warn">—</div>
+              <div class="map-stat-sub">70–90%</div>
+            </div>
             <div class="map-stat" id="trunk-stat-oos-card">
-              <div class="map-stat-k">OOS</div>
+              <div class="map-stat-k">Out Of Service (OOS)</div>
               <div class="map-stat-v" id="trunk-stat-oos">—</div>
-              <div class="map-stat-sub">Rows with OOS</div>
             </div>
             <div class="map-stat">
               <div class="map-stat-k">Last Update</div>
@@ -328,12 +318,10 @@
             <div class="card-actions">
               <span class="countdown-line" id="ext-countdown">Next: —</span>
               <span class="trunk-auto-status" id="ext-auto-status" hidden></span>
-              <div class="refresh-btn-wrap">
-                <div class="refresh-meta">Updated <span class="v mono" id="ext-meta-updated">—</span></div>
-              </div>
             </div>
           </div>
         </div>
+        <div class="map-stat-row ext-stat-row" id="ext-summary-kpi" aria-label="Extension summary"></div>
         <div class="alarm-type-filters" id="ext-search-filters">
           <span class="hint" style="margin:0">Search (contains):</span>
           <input type="search" id="ext-search" class="gw-search" placeholder="extension / name / port / type / gateway" autocomplete="off" />
@@ -343,7 +331,6 @@
           <span class="hint" style="margin:0">Type filters (ON=show, default all ON):</span>
           <div class="cdr-toggle-row" id="ext-type-btns"></div>
         </div>
-        <div class="cdr-kpi-row" id="ext-summary-kpi"></div>
         <div class="table-wrap alarm-table-wrap">
           <table class="data-table" id="ext-table">
             <thead>
@@ -377,12 +364,10 @@
                 <button type="button" class="btn cdr-toggle" id="btn-flash-yellow" data-manual-flash="minor" title="Manual deep yellow flash test">Flash Yellow</button>
                 <button type="button" class="btn cdr-toggle" id="btn-flash-red" data-manual-flash="major" title="Manual deep red flash test">Flash Red</button>
               </div>
-              <div class="refresh-btn-wrap">
-                <div class="refresh-meta">Updated <span class="v mono" id="alarm-meta-updated">—</span></div>
-              </div>
             </div>
           </div>
         </div>
+        <div class="map-stat-row alarm-stat-row" id="alarm-summary-kpi" aria-label="Alarm summary"></div>
         <div class="alarm-type-filters" id="alarm-search-filters">
           <span class="hint" style="margin:0">Search (contains):</span>
           <input type="search" id="alarm-search" class="gw-search" placeholder="date / severity / mtce / port / status" autocomplete="off" />
@@ -391,7 +376,6 @@
           <span class="hint" style="margin:0">Mtce type filters (ON=show, default all ON):</span>
           <div class="cdr-toggle-row" id="alarm-type-btns"></div>
         </div>
-        <div class="cdr-kpi-row" id="alarm-summary-kpi"></div>
         <div class="table-wrap alarm-table-wrap">
           <table class="data-table" id="alarm-table">
             <thead>
@@ -421,19 +405,11 @@
             <div class="card-actions">
               <span class="countdown-line" id="gw-countdown">Next: —</span>
               <span class="trunk-auto-status" id="gw-auto-status" hidden></span>
-              <div class="refresh-btn-wrap">
-                <div class="refresh-meta">Updated <span class="v mono" id="gw-meta-updated">—</span></div>
-              </div>
             </div>
           </div>
         </div>
         <div id="gw-list-view">
-        <div class="alarm-type-filters" id="gw-search-filters">
-          <span class="hint" style="margin:0">Search hostname / IP (contains):</span>
-          <input type="search" id="gw-search" class="gw-search" placeholder="e.g. L  or  172.29.88" autocomplete="off" />
-          <span class="hint mono" id="gw-list-count" style="margin:0"></span>
-        </div>
-        <div class="map-stat-row gw-stat-row gw-stat-row-list" id="gw-summary-kpi" aria-label="Gateway summary">
+        <div class="map-stat-row gw-stat-row" id="gw-summary-kpi" aria-label="Gateway summary">
           <div class="map-stat" id="gw-stat-online-card">
             <div class="map-stat-k">Online</div>
             <div class="map-stat-v" id="gw-stat-online">—</div>
@@ -455,6 +431,15 @@
             <div class="map-stat-k">Warning</div>
             <div class="map-stat-v" id="gw-stat-wn">—</div>
           </div>
+          <div class="map-stat">
+            <div class="map-stat-k">Last Update</div>
+            <div class="map-stat-v map-stat-v-ts" id="gw-stat-updated">—</div>
+          </div>
+        </div>
+        <div class="alarm-type-filters" id="gw-search-filters">
+          <span class="hint" style="margin:0">Search hostname / IP (contains):</span>
+          <input type="search" id="gw-search" class="gw-search" placeholder="e.g. L  or  172.29.88" autocomplete="off" />
+          <span class="hint mono" id="gw-list-count" style="margin:0"></span>
         </div>
         <div class="table-wrap alarm-table-wrap">
           <table class="data-table" id="gw-table">
@@ -556,13 +541,6 @@
             <div class="card-actions">
               <span class="countdown-line" id="map-countdown">Next: —</span>
               <span class="trunk-auto-status" id="map-auto-status" hidden></span>
-              <div class="refresh-btn-wrap">
-                <div class="refresh-meta">Updated <span class="v mono" id="map-meta-updated">—</span></div>
-              </div>
-            </div>
-            <div class="card-actions">
-              <span class="hint" style="margin:0">Search site / hostname</span>
-              <input type="search" id="map-search" class="gw-search" placeholder="CPB / GW43 / 172.29" autocomplete="off" />
             </div>
             <div class="legend-block">
               <div class="legend">
@@ -594,6 +572,14 @@
             <div class="map-stat-v" id="map-stat-minor">—</div>
             <div class="map-stat-sub">GW boxes + CM</div>
           </div>
+          <div class="map-stat">
+            <div class="map-stat-k">Last Update</div>
+            <div class="map-stat-v map-stat-v-ts" id="map-stat-updated">—</div>
+          </div>
+        </div>
+        <div class="alarm-type-filters" id="map-search-filters">
+          <span class="hint" style="margin:0">Search site / hostname</span>
+          <input type="search" id="map-search" class="gw-search" placeholder="CPB / GW43 / 172.29" autocomplete="off" />
         </div>
         <p class="hint map-unmapped" id="map-unmapped" hidden></p>
         <div class="map-shell">
@@ -621,7 +607,7 @@
                   <button type="button" class="btn map-side-close" id="map-side-close" title="Close">×</button>
                 </div>
               </div>
-              <div class="cdr-kpi-row map-side-kpis" id="map-side-meta"></div>
+              <div class="map-stat-row map-side-kpis" id="map-side-meta"></div>
               <div class="table-wrap map-side-table-wrap">
                 <table class="data-table" id="map-side-table">
                   <thead>
@@ -730,6 +716,6 @@
       }
     })();
   </script>
-  <script src="app.js?v=20260821t" type="module"></script>
+  <script src="app.js?v=20260821y" type="module"></script>
 </body>
 </html>

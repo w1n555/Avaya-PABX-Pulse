@@ -7,7 +7,7 @@
  * CM as 1 if it has its own (non-GGGV*) alarm, e.g. 1 G450 + 1 CM T1 = 2.
  */
 
-import { openGatewayDetail } from "./gateway-ui.js?v=20260821s";
+import { openGatewayDetail } from "./gateway-ui.js?v=20260821y";
 
 function apiUrlMap(path) {
   let dir = window.location.pathname || "/";
@@ -291,6 +291,7 @@ function paintMapStats(rows) {
   setText("map-stat-gws", `${online} / ${gws.length}`);
   setText("map-stat-critical", String(maj));
   setText("map-stat-minor", String(min));
+  setText("map-stat-updated", fmtGwTs(latestMapTs()));
   setText("map-meta-updated", fmtGwTs(latestMapTs()));
   const gwCard = document.getElementById("map-stat-gws-card");
   if (gwCard) {
@@ -392,15 +393,17 @@ function renderSide(site) {
   }
   if (meta) {
     meta.innerHTML = [
-      { k: "Gateways", v: site.gwCount },
-      { k: "Down", v: site.down },
-      { k: "Major", v: site.mj },
-      { k: "Minor", v: site.mn },
-      { k: "Warning", v: site.wn },
+      { k: "Gateways", v: site.gwCount, acc: "" },
+      { k: "Down", v: site.down, acc: "red" },
+      { k: "Major", v: site.mj, acc: "red" },
+      { k: "Minor", v: site.mn, acc: "yellow" },
+      { k: "Warning", v: site.wn, acc: "" },
     ]
       .map(
-        (it) => `<div class="cdr-kpi"><div class="cdr-kpi-v">${escapeHtml(String(it.v))}</div>
-        <div class="cdr-kpi-k">${escapeHtml(it.k)}</div></div>`
+        (it) => `<div class="map-stat${it.acc ? ` accent-${it.acc}` : ""}">
+          <div class="map-stat-k">${escapeHtml(it.k)}</div>
+          <div class="map-stat-v">${escapeHtml(String(it.v))}</div>
+        </div>`
       )
       .join("");
   }

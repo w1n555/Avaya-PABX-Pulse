@@ -19,7 +19,7 @@ import {
   refreshAlarmsSilent,
   syncAlarmCountdown,
   setOssiBusy as setAlarmOssiBusy,
-} from "./alarm-ui.js?v=20260821s";
+} from "./alarm-ui.js?v=20260821y";
 import {
   initGatewayUi,
   onGatewayTabShow,
@@ -30,7 +30,7 @@ import {
   setOssiBusy as setGatewayOssiBusy,
   runGatewayConfigRefresh,
   getOpenGatewayDetailMg,
-} from "./gateway-ui.js?v=20260821s";
+} from "./gateway-ui.js?v=20260821y";
 import {
   initExtensionUi,
   onExtensionTabShow,
@@ -40,7 +40,7 @@ import {
   armExtensionNext,
   EXTENSION_INTERVAL_MS,
   setOssiBusy as setExtensionOssiBusy,
-} from "./extension-ui.js";
+} from "./extension-ui.js?v=20260821y";
 import {
   initMapUi,
   onMapTabShow,
@@ -49,7 +49,7 @@ import {
   refreshMapFromCache,
   syncMapCountdown,
   setOssiBusy as setMapOssiBusy,
-} from "./map-ui.js?v=20260821s";
+} from "./map-ui.js?v=20260821y";
 
 function setOssiBusy(busy) {
   try {
@@ -76,6 +76,10 @@ function setOssiBusy(busy) {
 
 const API = "api";
 const REFRESH_INTERVAL_SEC = 90;
+/** Login 後永遠 Auto 90s pack — no checkbox, cannot stop while connected. */
+function autoEnabled() {
+  return !!state.connected;
+}
 /** This browser tab explicitly clicked Login (not auto-resume from leftover OSSI). */
 const UI_SESSION_KEY = "cm_noc_ui_logged_in";
 const NOTES_LS_KEY = "cm_noc_notes";
@@ -291,7 +295,7 @@ function startExtensionHourlyTimer() {
   armExtensionNext(EXTENSION_INTERVAL_MS);
   state.extensionTimer = setInterval(() => {
     if (!state.connected) return;
-    if (!$("chk-auto")?.checked) return;
+    if (!autoEnabled()) return;
     enqueueExtensionRefresh({ showModal: false, reason: "hourly" });
   }, EXTENSION_INTERVAL_MS);
 }
@@ -429,11 +433,19 @@ function setError(msg) {
  * Monitoring / auto messages go next to 60s countdown (trunk-auto-status).
  * Login / connect messages stay on connect-panel status-line.
  */
+function statusLooksUpdating(msg) {
+  const s = String(msg || "");
+  if (!s) return false;
+  if (/complete|acked/i.test(s) && !/Updating/i.test(s)) return false;
+  return /Updat|queued|waiting for OSSI|OSSI busy|Auto update…/i.test(s);
+}
+
 function setStatus(msg) {
   const connectEl = $("status-line");
-  const barIds = ["trunk-auto-status", "map-auto-status"];
+  const barIds = ["trunk-auto-status", "map-auto-status", "gw-auto-status", "alarm-auto-status", "ext-auto-status"];
   const preferBar = state.connected && barIds.some((id) => $(id));
   if (preferBar) {
+    const updating = statusLooksUpdating(msg);
     for (const id of barIds) {
       const el = $(id);
       if (!el) continue;
@@ -441,10 +453,12 @@ function setStatus(msg) {
         el.hidden = true;
         el.textContent = "";
         el.removeAttribute("title");
+        el.classList.remove("is-updating");
       } else {
         el.hidden = false;
         el.textContent = msg;
         el.title = msg;
+        el.classList.toggle("is-updating", updating);
       }
     }
     if (connectEl) {
@@ -610,17 +624,19 @@ function paintTrunkSummary(rows) {
     const el = $(id);
     if (el) el.textContent = text;
   };
-  set("trunk-stat-groups", String(n));
-  set("trunk-stat-healthy", String(healthy));
+  set("trunk-stat-groups", `${healthy} / ${n}`);
   set("trunk-stat-warn", String(warn));
   set("trunk-stat-crit", String(crit));
   set("trunk-stat-oos", String(oosRows));
   set("trunk-stat-updated", newest ? fmtTime(newest) : "—");
   const groups = $("trunk-stat-groups-card");
   if (groups) {
-    groups.classList.remove("accent-red", "accent-green");
-    if (n && crit === 0 && warn === 0) groups.classList.add("accent-green");
-    else if (n && crit > 0) groups.classList.add("accent-red");
+    groups.classList.remove("accent-red", "accent-green", "accent-yellow");
+    if (!n) {
+      /* empty */
+    } else if (crit > 0) groups.classList.add("accent-red");
+    else if (warn > 0) groups.classList.add("accent-yellow");
+    else groups.classList.add("accent-green");
   }
   const oosCard = $("trunk-stat-oos-card");
   if (oosCard) oosCard.classList.toggle("accent-red", oosRows > 0);
@@ -936,11 +952,6 @@ function paintCountdown() {
     el.classList.remove("is-updating");
     return;
   }
-  if (!$("chk-auto")?.checked) {
-    el.textContent = "Next: Auto off";
-    el.classList.remove("is-updating");
-    return;
-  }
   if (state.refreshing) {
     el.textContent = "Updating…";
     el.classList.add("is-updating");
@@ -973,8 +984,7 @@ function startCountdownClock() {
     healAutoCountdown();
     // Auto refresh: no popup; open OSSI tabs pack Trunk+Alarm+Gateway
     if (
-      state.connected &&
-      $("chk-auto")?.checked &&
+      autoEnabled() &&
       !state.refreshing &&
       state.nextRefreshAt > 0 &&
       Date.now() >= state.nextRefreshAt &&
@@ -1024,8 +1034,7 @@ function armNextRefresh(fromNowSec = REFRESH_INTERVAL_SEC) {
 
 /** If Next is >90s (stale 24h park), snap back so Auto actually runs. */
 function healAutoCountdown() {
-  if (!state.connected) return;
-  if ($("chk-auto")?.checked === false) return;
+  if (!autoEnabled()) return;
   const maxAt = Date.now() + REFRESH_INTERVAL_SEC * 1000;
   if (!state.nextRefreshAt || state.nextRefreshAt > maxAt + 1500) {
     armNextRefresh(REFRESH_INTERVAL_SEC);
@@ -1167,7 +1176,10 @@ function applyMonitoredResponse(res) {
 }
 
 function renderTrunkMeta(data) {
-  $("meta-updated").textContent = fmtTime(data && data.lastUpdate);
+  const meta = $("meta-updated");
+  if (meta) meta.textContent = fmtTime(data && data.lastUpdate);
+  const card = $("trunk-stat-updated");
+  if (card && data && data.lastUpdate) card.textContent = fmtTime(data.lastUpdate);
   // Last-known CM host from cache is OK to show; session label must follow LIVE state only
   if (data && data.host) $("meta-host").textContent = data.host;
   // Never set "Monitoring" from stale trunk_data.connected — only after real Login / session/status
@@ -1592,7 +1604,7 @@ async function runLoginOssiCache() {
       });
     } catch (e) {
       console.warn("login display alarms:", e?.message || e);
-      setLoginOssi("display alarms (failed — will retry on Auto 60s)", 80);
+      setLoginOssi(`display alarms (failed — will retry on Auto ${REFRESH_INTERVAL_SEC}s)`, 80);
     }
 
     setLoginOssi("list media-gateway", 92);
@@ -1603,7 +1615,7 @@ async function runLoginOssiCache() {
       });
     } catch (e) {
       console.warn("login list media-gateway:", e?.message || e);
-      setLoginOssi("list media-gateway (failed — will retry on Auto 60s)", 92);
+      setLoginOssi(`list media-gateway (failed — will retry on Auto ${REFRESH_INTERVAL_SEC}s)`, 92);
     }
     pumpQueue();
   } finally {
@@ -1725,7 +1737,6 @@ async function connect() {
     setLoginOssi("Cached · list extension queued (hourly)", 100);
     setError("");
     setStatus("Logged in. Trunk / Alarm / Gateway ready · list extension queued.");
-    $("chk-auto").checked = true;
     onSessionLive();
     // list extension after login pack — enqueue (does not block 100%)
     enqueueExtensionRefresh({ showModal: false, reason: "login" });
@@ -1822,11 +1833,8 @@ function onSessionLive() {
   startLivePoll();
   startCountdownClock();
   startCmTimeWatch();
-  if ($("chk-auto")?.checked !== false) {
-    $("chk-auto").checked = true;
-    if (!state.nextRefreshAt || state.nextRefreshAt < Date.now()) {
-      armNextRefresh(REFRESH_INTERVAL_SEC);
-    }
+  if (!state.nextRefreshAt || state.nextRefreshAt < Date.now()) {
+    armNextRefresh(REFRESH_INTERVAL_SEC);
   }
   paintCountdown();
 }
@@ -2202,7 +2210,7 @@ async function progressiveRefresh(opts = {}) {
 
     // Never throw on partial TG fails — login / auto must keep running
     if (oneOk === 0 && lastErr) {
-      setStatus("Trunk update incomplete — next Auto 60s will retry");
+      setStatus(`Trunk update incomplete — next Auto ${REFRESH_INTERVAL_SEC}s will retry`);
       try {
         await loadTrunkData({ soft: true, flashChanges: false });
       } catch {
@@ -2236,7 +2244,7 @@ async function progressiveRefresh(opts = {}) {
     }
   } catch (e) {
     // Transport / bridge issues — still no login-card error (Status / next 60s)
-    setStatus("Trunk update incomplete — next Auto 60s will retry");
+    setStatus(`Trunk update incomplete — next Auto ${REFRESH_INTERVAL_SEC}s will retry`);
     try {
       await loadTrunkData({ soft: true, flashChanges: true });
     } catch {
@@ -2262,7 +2270,7 @@ async function progressiveRefresh(opts = {}) {
     // Pack after trunks while still holding the cycle — do not arm 60s until pack ends.
     // Otherwise Auto fires again during list configuration and CmApi returns 502.
     const pack = ["auto", "auto-on", "login", "visible", "resume", "tab"].includes(reason);
-    if (pack && state.connected && $("chk-auto")?.checked) {
+    if (pack && autoEnabled()) {
       try {
         setOssiBusy(true);
       } catch {
@@ -2442,7 +2450,7 @@ function clearAuto() {
 
 function scheduleAuto() {
   // Countdown-driven progressive refresh (see startCountdownClock)
-  if (!$("chk-auto")?.checked) {
+  if (!autoEnabled()) {
     clearAuto();
     return;
   }
@@ -2627,17 +2635,6 @@ async function init() {
   $("inp-tg-note")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") addTg();
   });
-  $("chk-auto")?.addEventListener("change", () => {
-    if (state.connected && $("chk-auto").checked) {
-      // Turn auto on → silent update now, then 60s (no popup for auto path)
-      progressiveRefresh({ reason: "auto-on", showModal: false }).catch((e) =>
-        console.warn("auto-on refresh:", e?.message || e)
-      );
-    } else {
-      clearAuto();
-    }
-  });
-
   const progClose = $("btn-progress-close");
   if (progClose) progClose.addEventListener("click", () => hideProgress());
 
@@ -2649,8 +2646,7 @@ async function init() {
   document.addEventListener("visibilitychange", () => {
     if (
       document.visibilityState === "visible" &&
-      state.connected &&
-      $("chk-auto")?.checked &&
+      autoEnabled() &&
       autoPackTabOpen()
     ) {
       progressiveRefresh({ reason: "visible", showModal: false }).catch((e) => {
@@ -2682,7 +2678,6 @@ async function init() {
         } catch {
           /* cache miss OK */
         }
-        $("chk-auto").checked = true;
         onSessionLive();
         setAlarmSessionConnected(true);
         setGatewaySessionConnected(true);

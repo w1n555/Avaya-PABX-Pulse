@@ -6,7 +6,7 @@
  */
 
 import { showProgress, setProgress, finishProgress } from "./cdr-ui.js";
-import { getGatewayMjMn } from "./gateway-ui.js?v=20260821s";
+import { getGatewayMjMn } from "./gateway-ui.js?v=20260821y";
 
 /** Magic TG for refresh/one when CmApi has no /alarms route. */
 const TG_ACTIVE = 9996;
@@ -132,11 +132,13 @@ function setAlarmStatus(msg) {
     el.hidden = true;
     el.textContent = "";
     el.removeAttribute("title");
+    el.classList.remove("is-updating");
     return;
   }
   el.hidden = false;
   el.textContent = msg;
   el.title = msg;
+  el.classList.toggle("is-updating", /Updat|queued|waiting for OSSI|OSSI busy|Auto update…/i.test(msg));
 }
 
 function paintAlarmUpdated() {
@@ -188,14 +190,17 @@ function paintAlarmSummary() {
   if (!el) return;
   const s = ALARM.data.summary || {};
   el.innerHTML = [
-    { k: "Major", v: s.activeMajor ?? 0 },
-    { k: "Minor", v: s.activeMinor ?? 0 },
-    { k: "Warning", v: s.activeWarning ?? 0 },
-    { k: "Active Total", v: s.activeTotal ?? (ALARM.data.active || []).length },
+    { k: "Major", v: s.activeMajor ?? 0, acc: "red" },
+    { k: "Minor", v: s.activeMinor ?? 0, acc: "yellow" },
+    { k: "Warning", v: s.activeWarning ?? 0, acc: "" },
+    { k: "Active Total", v: s.activeTotal ?? (ALARM.data.active || []).length, acc: "" },
+    { k: "Last Update", v: fmtUpdated(ALARM.data.lastUpdate), acc: "", ts: true },
   ]
     .map(
-      (it) => `<div class="cdr-kpi"><div class="cdr-kpi-v">${escapeHtml(String(it.v))}</div>
-      <div class="cdr-kpi-k">${escapeHtml(it.k)}</div></div>`
+      (it) => `<div class="map-stat${it.acc ? ` accent-${it.acc}` : ""}">
+        <div class="map-stat-k">${escapeHtml(it.k)}</div>
+        <div class="map-stat-v${it.ts ? " map-stat-v-ts" : ""}">${escapeHtml(String(it.v))}</div>
+      </div>`
     )
     .join("");
 }
@@ -265,23 +270,27 @@ function renderAlarmTable() {
 function paintAlarmCountdown() {
   const el = document.getElementById("alarm-countdown");
   if (!el) return;
+  const set = (txt, updating) => {
+    el.textContent = txt;
+    el.classList.toggle("is-updating", !!updating);
+  };
   if (!ALARM.connected) {
-    el.textContent = "Next: —";
+    set("Next: —", false);
     return;
   }
   if (ALARM.loading || ALARM.ossiBusy) {
-    el.textContent = "Updating…";
+    set("Updating…", true);
     return;
   }
   if (!ALARM.nextAt) {
-    el.textContent = "Next: session Auto 90s";
+    set("Next: session Auto 90s", false);
     return;
   }
   const sec = Math.min(
     90,
     Math.max(0, Math.ceil((ALARM.nextAt - Date.now()) / 1000))
   );
-  el.textContent = `Next: ${sec}s`;
+  set(`Next: ${sec}s`, false);
 }
 
 function applyAlarmPayload(data) {
