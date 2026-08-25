@@ -565,6 +565,67 @@ function utilColorClass(item) {
   return item.statusColor || "green";
 }
 
+function trunkRowSeverity(it) {
+  if (it.error) return "sev-fail";
+  if (!it.hasLive) return "";
+  const c = utilColorClass(it);
+  if (c === "red") return "sev-major";
+  if (c === "yellow") return "sev-minor";
+  return "";
+}
+
+function applyTrunkRowSeverity(tr, it) {
+  if (!tr) return;
+  tr.classList.remove("sev-fail", "sev-major", "sev-minor", "has-oos");
+  const sev = trunkRowSeverity(it);
+  if (sev) tr.classList.add(sev);
+  if (!it.error && Number(it.oos) > 0) tr.classList.add("has-oos");
+}
+
+function paintTrunkSummary(rows) {
+  const list = rows || mergeRows();
+  const n = list.length;
+  let healthy = 0;
+  let warn = 0;
+  let crit = 0;
+  let oosRows = 0;
+  let newest = null;
+  let newestMs = 0;
+  for (const it of list) {
+    if (it.error || utilColorClass(it) === "red") crit += 1;
+    else if (!it.hasLive) {
+      /* waiting for first status */
+    } else if (utilColorClass(it) === "yellow") warn += 1;
+    else healthy += 1;
+    if (!it.error && Number(it.oos) > 0) oosRows += 1;
+    if (it.lastUpdate) {
+      const ms = Date.parse(it.lastUpdate);
+      if (Number.isFinite(ms) && ms >= newestMs) {
+        newestMs = ms;
+        newest = it.lastUpdate;
+      } else if (!Number.isFinite(ms) && !newest) newest = it.lastUpdate;
+    }
+  }
+  const set = (id, text) => {
+    const el = $(id);
+    if (el) el.textContent = text;
+  };
+  set("trunk-stat-groups", String(n));
+  set("trunk-stat-healthy", String(healthy));
+  set("trunk-stat-warn", String(warn));
+  set("trunk-stat-crit", String(crit));
+  set("trunk-stat-oos", String(oosRows));
+  set("trunk-stat-updated", newest ? fmtTime(newest) : "—");
+  const groups = $("trunk-stat-groups-card");
+  if (groups) {
+    groups.classList.remove("accent-red", "accent-green");
+    if (n && crit === 0 && warn === 0) groups.classList.add("accent-green");
+    else if (n && crit > 0) groups.classList.add("accent-red");
+  }
+  const oosCard = $("trunk-stat-oos-card");
+  if (oosCard) oosCard.classList.toggle("accent-red", oosRows > 0);
+}
+
 function mergeRows() {
   /** Prefer monitored order; join live trunk_data by tg. */
   const byTg = new Map((state.trunkItems || []).map((it) => [Number(it.tg), it]));
@@ -623,10 +684,11 @@ function utilCellHtml(it) {
   if (it.error) return `<strong>—</strong>`;
   const color = utilColorClass(it);
   const util = Number(it.utilizationPct || 0);
-  return `<strong>${util.toFixed(1)}%</strong><div class="util-bar"><i style="width:${Math.min(
+  const cls = color === "yellow" ? "util-yellow" : color === "red" ? "util-red" : "util-green";
+  return `<strong>${util.toFixed(1)}%</strong><div class="util-bar"><i class="${cls}" style="width:${Math.min(
     100,
     util
-  )}%;background:var(--${color === "yellow" ? "warn" : color === "red" ? "bad" : "ok"})"></i></div>`;
+  )}%"></i></div>`;
 }
 
 function statusCellHtml(it) {
@@ -645,6 +707,7 @@ function buildTrunkRow(it) {
   tr.className = "tg-row";
   tr.dataset.tg = String(it.tg);
   tr.draggable = true;
+  applyTrunkRowSeverity(tr, it);
   if (it.error) tr.title = "UPDATE FAILED";
   else tr.removeAttribute("title");
 
@@ -657,10 +720,10 @@ function buildTrunkRow(it) {
       <td class="name-cell">${escapeHtml(it.name || "—")}${
         it.type ? `<span class="name">${escapeHtml(it.type)}${it.tac ? " · TAC " + escapeHtml(it.tac) : ""}</span>` : ""
       }</td>
-      <td class="col-total">${it.error ? "—" : it.total ?? "—"}</td>
-      <td class="col-idle">${it.error ? "—" : it.idle ?? "—"}</td>
-      <td class="col-busy">${it.error ? "—" : it.busy ?? "—"}</td>
-      <td class="col-oos">${it.error ? "—" : it.oos ?? "—"}</td>
+      <td class="col-total mono">${it.error ? "—" : it.total ?? "—"}</td>
+      <td class="col-idle mono">${it.error ? "—" : it.idle ?? "—"}</td>
+      <td class="col-busy mono">${it.error ? "—" : it.busy ?? "—"}</td>
+      <td class="col-oos mono">${it.error ? "—" : it.oos ?? "—"}</td>
       <td class="col-util">${utilCellHtml(it)}</td>
       <td class="col-status">${statusCellHtml(it)}</td>
       <td class="mono col-updated" data-updated-tg="${it.tg}">${fmtTime(it.lastUpdate)}</td>
@@ -677,6 +740,7 @@ function renderTrunkTable() {
     tbody.innerHTML = `<tr class="empty"><td colspan="12">${
       state.connected ? "未有監控 TG — 上面加入 TG 號碼。" : "Login 後會顯示監控中嘅 Trunk Group。"
     }</td></tr>`;
+    paintTrunkSummary(rows);
     return;
   }
 
@@ -718,6 +782,7 @@ function renderTrunkTable() {
       if (cell) cell.classList.add("updated-flash");
     }
   }
+  paintTrunkSummary(rows);
 }
 
 /**
@@ -756,6 +821,7 @@ function patchTrunkRow(item, { flash = false } = {}) {
 
   if (it.error) tr.title = "UPDATE FAILED";
   else tr.removeAttribute("title");
+  applyTrunkRowSeverity(tr, it);
 
   const setTxt = (sel, val) => {
     const el = tr.querySelector(sel);
@@ -794,6 +860,7 @@ function patchTrunkRow(item, { flash = false } = {}) {
   }
 
   if (flash) flashUpdatedTg(tg);
+  paintTrunkSummary();
 }
 
 function markTrunkStickyError(tg, on) {

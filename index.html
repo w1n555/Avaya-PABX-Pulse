@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Avaya PABX Network Monitoring for NOC</title>
   <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="style.css?v=20260821s" />
+  <link rel="stylesheet" href="style.css?v=20260821t" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
   <script>
     // Apply theme before paint (avoid flash)
@@ -74,17 +74,49 @@
                 <span class="lg green"></span>&lt;70%
                 <span class="lg yellow"></span>70–90%
                 <span class="lg red"></span>&gt;90% / Idle=0
+                <span class="lg fail"></span>UPDATE FAILED
               </div>
             </div>
           </div>
         </div>
-        <div class="admin-row add-row">
-          <input type="number" id="inp-tg" min="1" max="9999" placeholder="TG #" />
-          <input type="text" id="inp-tg-note" maxlength="200" placeholder="Note（可選）" />
-          <button type="button" class="btn btn-primary" id="btn-add-tg">Add</button>
-        </div>
         <div id="trunk-list-view">
-          <div class="table-wrap">
+          <div class="map-stat-row trunk-stat-row" id="trunk-summary-kpi" aria-label="Trunk summary">
+            <div class="map-stat" id="trunk-stat-groups-card">
+              <div class="map-stat-k">Trunk Groups</div>
+              <div class="map-stat-v" id="trunk-stat-groups">—</div>
+              <div class="map-stat-sub">Monitored</div>
+            </div>
+            <div class="map-stat accent-green" id="trunk-stat-healthy-card">
+              <div class="map-stat-k">Healthy</div>
+              <div class="map-stat-v" id="trunk-stat-healthy">—</div>
+              <div class="map-stat-sub">GREEN</div>
+            </div>
+            <div class="map-stat accent-yellow" id="trunk-stat-warn-card">
+              <div class="map-stat-k">Warning</div>
+              <div class="map-stat-v" id="trunk-stat-warn">—</div>
+              <div class="map-stat-sub">70–90%</div>
+            </div>
+            <div class="map-stat accent-red" id="trunk-stat-crit-card">
+              <div class="map-stat-k">Critical</div>
+              <div class="map-stat-v" id="trunk-stat-crit">—</div>
+              <div class="map-stat-sub">&gt;90% / FAILED</div>
+            </div>
+            <div class="map-stat" id="trunk-stat-oos-card">
+              <div class="map-stat-k">OOS</div>
+              <div class="map-stat-v" id="trunk-stat-oos">—</div>
+              <div class="map-stat-sub">Rows with OOS</div>
+            </div>
+            <div class="map-stat">
+              <div class="map-stat-k">Last Update</div>
+              <div class="map-stat-v map-stat-v-ts" id="trunk-stat-updated">—</div>
+            </div>
+          </div>
+          <div class="admin-row add-row">
+            <input type="number" id="inp-tg" min="1" max="9999" placeholder="TG #" />
+            <input type="text" id="inp-tg-note" maxlength="200" placeholder="Note（可選）" />
+            <button type="button" class="btn btn-primary" id="btn-add-tg">Add</button>
+          </div>
+          <div class="table-wrap trunk-table-wrap">
             <table class="data-table" id="trunk-table">
               <thead>
                 <tr>
@@ -698,6 +730,6 @@
       }
     })();
   </script>
-  <script src="app.js?v=20260821s" type="module"></script>
+  <script src="app.js?v=20260821t" type="module"></script>
 </body>
 </html>

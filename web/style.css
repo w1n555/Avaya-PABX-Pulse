@@ -282,7 +282,7 @@ body {
   font-size: 1.08rem;
 }
 .hint { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.35rem; }
-.hint-drag { margin-bottom: 0.75rem; }
+.hint-drag { margin-bottom: 0.35rem; }
 .connect-hint { margin: 0.65rem 0 0; }
 .hint code { font-family: var(--mono); font-size: 0.8rem; color: var(--accent-2); }
 
@@ -331,8 +331,10 @@ body {
 }
 .legend {
   display: flex;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
   align-items: center;
+  justify-content: flex-end;
   color: var(--muted);
   font-size: 0.8rem;
 }
@@ -367,6 +369,7 @@ body {
 .lg.green { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
 .lg.yellow { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
 .lg.red { background: var(--bad); box-shadow: 0 0 8px var(--bad); }
+.lg.fail { background: #94a3b8; box-shadow: 0 0 8px #94a3b8; border-radius: 2px; }
 
 .add-row {
   display: flex;
@@ -392,11 +395,14 @@ body {
   border: 1px solid var(--border);
   border-radius: 8px;
 }
+.trunk-table-wrap {
+  max-height: calc(100vh - 22rem);
+}
 .data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
-  min-width: 960px;
+  min-width: 900px;
 }
 .data-table th {
   position: sticky;
@@ -492,6 +498,9 @@ tr.tg-row.drag-over { outline: 1px dashed var(--accent); background: rgba(59, 13
   height: 100%;
   border-radius: 99px;
 }
+.util-bar > i.util-green { background: var(--ok); }
+.util-bar > i.util-yellow { background: var(--warn); }
+.util-bar > i.util-red { background: var(--bad); }
 .badge {
   display: inline-flex;
   align-items: center;
@@ -510,9 +519,53 @@ tr.tg-row.drag-over { outline: 1px dashed var(--accent); background: rgba(59, 13
 .badge.yellow .dot { background: var(--warn); }
 .badge.red { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
 .badge.red .dot { background: var(--bad); }
-.badge.fail { background: rgba(148, 163, 184, 0.16); color: #e2e8f0; text-transform: none; letter-spacing: 0.02em; }
+.badge.fail {
+  background: rgba(148, 163, 184, 0.16);
+  color: #e2e8f0;
+  border: 1px solid #94a3b8;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
 .badge.fail .dot { background: #94a3b8; }
 .badge.muted { background: rgba(143, 163, 193, 0.12); color: var(--muted); text-transform: none; }
+
+#trunk-table .col-total,
+#trunk-table .col-idle,
+#trunk-table .col-busy,
+#trunk-table .col-oos,
+#trunk-table .col-util,
+#trunk-table .col-status,
+#trunk-table .col-updated {
+  white-space: nowrap;
+}
+#trunk-table .col-util { min-width: 5.5rem; }
+#trunk-table .col-status { min-width: 7.5rem; }
+#trunk-table .badge { font-size: 0.8rem; }
+#trunk-table .btn-rm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+#trunk-table .btn-rm:hover { opacity: 1; }
+#trunk-table td.col-updated { font-variant-numeric: tabular-nums; }
+
+html[data-theme="light"] #gw-table tr.sev-major,
+html[data-theme="light"] #trunk-table tr.tg-row.sev-major {
+  background: rgba(220, 38, 38, 0.08);
+}
+html[data-theme="light"] #gw-table tr.sev-minor,
+html[data-theme="light"] #trunk-table tr.tg-row.sev-minor {
+  background: rgba(202, 138, 4, 0.1);
+}
+html[data-theme="light"] #gw-table tr.sev-fail,
+html[data-theme="light"] #trunk-table tr.tg-row.sev-fail {
+  background: rgba(100, 116, 139, 0.1);
+}
+html[data-theme="light"] .badge.fail {
+  background: #334155;
+  color: #fff;
+  border-color: #0f172a;
+}
 
 .mono { font-family: var(--mono); font-size: 0.85rem; }
 
@@ -523,11 +576,17 @@ tr.tg-row.drag-over { outline: 1px dashed var(--accent); background: rgba(59, 13
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem 1rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.65rem;
 }
 .detail-head h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.15rem;
+  letter-spacing: 0.02em;
+}
+#detail-table td:nth-child(1),
+#detail-table td:nth-child(2),
+#detail-table td:nth-child(4) {
+  font-family: var(--mono);
 }
 .detail-meta {
   color: var(--muted);
@@ -538,7 +597,8 @@ tr.tg-row.drag-over { outline: 1px dashed var(--accent); background: rgba(59, 13
 .detail-hint { margin-bottom: 0.65rem; }
 .detail-table { min-width: 640px; }
 
-.gw-stat-row {
+.gw-stat-row,
+.trunk-stat-row {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 .gw-stat-row-list {
@@ -553,14 +613,24 @@ tr.tg-row.drag-over { outline: 1px dashed var(--accent); background: rgba(59, 13
 .map-stat.accent-blue { border-top-color: #60a5fa; }
 .map-stat.accent-blue .map-stat-v { color: #93c5fd; }
 #gw-detail-countdown { display: none; }
-#gw-table tr.sev-major {
+#gw-table tr.sev-major,
+#trunk-table tr.tg-row.sev-major {
   background: rgba(239, 68, 68, 0.08);
+  box-shadow: inset 3px 0 0 var(--bad);
 }
-#gw-table tr.sev-minor {
+#gw-table tr.sev-minor,
+#trunk-table tr.tg-row.sev-minor {
   background: rgba(234, 179, 8, 0.07);
+  box-shadow: inset 3px 0 0 var(--warn);
 }
-#gw-table tr.sev-fail {
+#gw-table tr.sev-fail,
+#trunk-table tr.tg-row.sev-fail {
   background: rgba(148, 163, 184, 0.08);
+  box-shadow: inset 3px 0 0 #94a3b8;
+}
+#trunk-table tr.tg-row.has-oos:not(.sev-major):not(.sev-fail) td.col-oos {
+  color: var(--warn);
+  font-weight: 800;
 }
 #gw-table .badge-node {
   font-size: 0.78rem;
@@ -608,7 +678,8 @@ tr.tg-row.drag-over { outline: 1px dashed var(--accent); background: rgba(59, 13
 }
 @media (max-width: 1100px) {
   .gw-stat-row,
-  .gw-stat-row-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .gw-stat-row-list,
+  .trunk-stat-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .gw-detail-kpi-alarms,
   .gw-detail-kpi-ports { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -1339,7 +1410,7 @@ html[data-theme="light"] select option {
 }
 /* In-progress: thin accent only — no whole-row dim/reload feel */
 tr.tg-row.row-updating {
-  box-shadow: inset 3px 0 0 var(--accent-2);
+  box-shadow: inset 3px 0 0 var(--accent-2) !important;
 }
 /* Updated cell flash green solid 2s — class kept by JS for full duration */
 td.col-updated.updated-flash {
@@ -1596,6 +1667,9 @@ html[data-theme="light"] body.alarm-bg-minor::before {
 }
 #map-stat-row {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.trunk-stat-row {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 .map-stat {
   background: var(--bg);
