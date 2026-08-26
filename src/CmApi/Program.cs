@@ -45,6 +45,29 @@ Directory.CreateDirectory(dataDir);
 var cdrFiles = new CmApi.Services.CdrFileService(siteRoot);
 var cdrLogger = app.Services.GetRequiredService<CdrLoggerHost>();
 
+static int ReadHeartbeatInt(JsonElement el, params string[] names)
+{
+    foreach (var name in names)
+    {
+        if (!el.TryGetProperty(name, out var p)) continue;
+        if (p.ValueKind == JsonValueKind.Number && p.TryGetInt32(out var n)) return n;
+        if (p.ValueKind == JsonValueKind.String && int.TryParse(p.GetString(), out var n2)) return n2;
+    }
+    return 0;
+}
+
+static bool ReadHeartbeatBool(JsonElement el, params string[] names)
+{
+    foreach (var name in names)
+    {
+        if (!el.TryGetProperty(name, out var p)) continue;
+        if (p.ValueKind is JsonValueKind.True or JsonValueKind.False) return p.GetBoolean();
+        if (p.ValueKind == JsonValueKind.String && bool.TryParse(p.GetString(), out var b)) return b;
+        if (p.ValueKind == JsonValueKind.Number && p.TryGetInt32(out var n)) return n != 0;
+    }
+    return false;
+}
+
 static async Task<IResult> ReadAlarmsFallback(string siteRoot, string dataLiveDir)
 {
     foreach (var p in new[]
@@ -155,30 +178,37 @@ app.MapPost("/session/disconnect", async (OssiBridgeClient bridge) =>
 
 // Browser open keep-alive; if no heartbeat ~90s, bridge logs off OSSI
 // Light path: no bridge auto-start storm; soft 200 on transient failure so UI does not thrash
-// Forward { tab } so bridge knows which page is open (AUTO 60s is tab-scoped in the browser)
+// Forward { tab, openMg, packing } so backend Auto 90s pack can skip while this tab owns OSSI
 app.MapPost("/session/heartbeat", async (HttpRequest req, OssiBridgeClient bridge) =>
 {
     try
     {
         string tab = "trunk";
+        int openMg = 0;
+        bool packing = false;
         try
         {
             using var doc = await JsonDocument.ParseAsync(req.Body);
-            if (doc.RootElement.ValueKind == JsonValueKind.Object
-                && doc.RootElement.TryGetProperty("tab", out var t)
-                && t.ValueKind == JsonValueKind.String)
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
             {
-                var s = (t.GetString() ?? "").Trim().ToLowerInvariant();
-                if (s is "trunk" or "alarm" or "cdr" or "station" or "vdn" or "gateway" or "extension" or "map")
-                    tab = s;
+                var root = doc.RootElement;
+                if (root.TryGetProperty("tab", out var t) && t.ValueKind == JsonValueKind.String)
+                {
+                    var s = (t.GetString() ?? "").Trim().ToLowerInvariant();
+                    if (s is "trunk" or "alarm" or "cdr" or "station" or "vdn" or "gateway" or "extension" or "map")
+                        tab = s;
+                }
+                openMg = ReadHeartbeatInt(root, "openMg", "OpenMg");
+                if (openMg < 0) openMg = 0;
+                packing = ReadHeartbeatBool(root, "packing", "Packing");
             }
         }
         catch
         {
-            /* empty / invalid body → default trunk */
+            /* empty / invalid body → defaults */
         }
 
-        var el = await bridge.PostLightAsync("session/heartbeat", new { tab });
+        var el = await bridge.PostLightAsync("session/heartbeat", new { tab, openMg, packing });
         return Results.Json(el);
     }
     catch (Exception ex)

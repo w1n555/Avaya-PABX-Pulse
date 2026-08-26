@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Avaya PABX Network Monitoring for NOC</title>
   <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="style.css?v=20260821y" />
+  <link rel="stylesheet" href="style.css?v=20260825k" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
   <script>
     // Apply theme before paint (avoid flash)
@@ -24,7 +24,7 @@
       <div class="top-meta">
         <button type="button" class="btn-theme" id="btn-theme" title="Switch light / dark theme" aria-label="Theme">☀</button>
         <div class="meta-item"><span class="k">CM</span><span class="v" id="meta-host">—</span></div>
-        <div class="meta-item"><span class="k">Session</span><span class="v" id="meta-session">已斷線</span></div>
+        <div class="meta-item"><span class="k">Session</span><span class="v" id="meta-session">Disconnected</span></div>
         <div class="meta-item"><span class="k">System Time</span><span class="v" id="meta-cm-time">—</span></div>
         <div class="meta-item clock"><span class="k">Local PC Time</span><span class="v" id="live-clock">--:--:--</span></div>
       </div>
@@ -39,7 +39,7 @@
         <button type="button" class="btn btn-primary" id="btn-connect">Login</button>
         <button type="button" class="btn" id="btn-disconnect" disabled>Logout</button>
       </div>
-      <p class="hint connect-hint" id="connect-hint">填 Host / Password → 撳 <strong>Login</strong>。系統會自動開 OSSI bridge、連 CM、開始監控。</p>
+      <p class="hint connect-hint" id="connect-hint">Enter Host / Password → click <strong>Login</strong>. The system starts the OSSI bridge, connects to CM, and begins monitoring.</p>
       <div class="status-line" id="status-line" hidden></div>
       <div class="error-line" id="error-line" hidden></div>
     </section>
@@ -56,22 +56,16 @@
     <main class="main" id="panel-trunk" data-panel="trunk">
       <section class="card trunk-card" id="trunk-card">
         <div class="panel-head">
-          <div>
-            <h2>Trunk Group Status</h2>
-            <p class="hint hint-drag">拖曳 ⋮⋮ 可改排序</p>
-          </div>
+          <h2>Trunk Group Status</h2>
           <div class="card-actions-col">
             <div class="card-actions">
-              <span class="countdown-line" id="trunk-countdown">Next: —</span>
-              <span class="trunk-auto-status" id="trunk-auto-status" hidden></span>
-            </div>
-            <div class="legend-block">
               <div class="legend">
                 <span class="lg green"></span>&lt;70%
                 <span class="lg yellow"></span>70–90%
                 <span class="lg red"></span>&gt;90% / Idle=0
                 <span class="lg fail"></span>UPDATE FAILED
               </div>
+              <span class="trunk-auto-status" id="trunk-auto-status">Waiting for Auto…</span>
             </div>
           </div>
         </div>
@@ -103,7 +97,7 @@
           </div>
           <div class="admin-row add-row">
             <input type="number" id="inp-tg" min="1" max="9999" placeholder="TG #" />
-            <input type="text" id="inp-tg-note" maxlength="200" placeholder="Note（可選）" />
+            <input type="text" id="inp-tg-note" maxlength="200" placeholder="Note (optional)" />
             <button type="button" class="btn btn-primary" id="btn-add-tg">Add</button>
           </div>
           <div class="table-wrap trunk-table-wrap">
@@ -125,14 +119,14 @@
                 </tr>
               </thead>
               <tbody id="trunk-tbody">
-                <tr class="empty"><td colspan="12">Login 後會顯示監控中嘅 Trunk Group。</td></tr>
+                <tr class="empty"><td colspan="12">Monitored trunk groups appear after Login.</td></tr>
               </tbody>
             </table>
           </div>
         </div>
         <div id="trunk-detail-view" class="detail-view" hidden>
           <div class="detail-head">
-            <button type="button" class="btn" id="btn-detail-back">← 返回清單</button>
+            <button type="button" class="btn" id="btn-detail-back">← Back to list</button>
             <h3 id="detail-title">TG —</h3>
             <span class="detail-meta" id="detail-meta"></span>
           </div>
@@ -165,10 +159,7 @@
 
       <section class="card cdr-card">
         <div class="panel-head">
-          <div>
-            <h2>CDR Search</h2>
-            <p class="hint">Search daily text logs (one call = one line). Export is Excel-friendly CSV.</p>
-          </div>
+          <h2>CDR Search</h2>
           <div class="card-actions">
             <button type="button" class="btn" id="btn-cdr-export">Export CSV (Excel)</button>
             <button type="button" class="btn btn-primary" id="btn-cdr-search">Search</button>
@@ -310,25 +301,20 @@
     <main class="main hidden" id="panel-extension" data-panel="extension">
       <section class="card alarm-card" id="extension-card">
         <div class="panel-head">
-          <div>
-            <h2>Extension List</h2>
-            <p class="hint">OSSI <span class="mono">list extension</span> + <span class="mono">list station</span> — Port merged — search + type filter — refresh hourly (queued)</p>
-          </div>
+          <h2>Extension List</h2>
           <div class="card-actions-col">
             <div class="card-actions">
-              <span class="countdown-line" id="ext-countdown">Next: —</span>
-              <span class="trunk-auto-status" id="ext-auto-status" hidden></span>
+              <span class="trunk-auto-status" id="ext-auto-status">Waiting for Auto…</span>
             </div>
           </div>
         </div>
         <div class="map-stat-row ext-stat-row" id="ext-summary-kpi" aria-label="Extension summary"></div>
         <div class="alarm-type-filters" id="ext-search-filters">
-          <span class="hint" style="margin:0">Search (contains):</span>
+          <span class="hint" style="margin:0">Search:</span>
           <input type="search" id="ext-search" class="gw-search" placeholder="extension / name / port / type / gateway" autocomplete="off" />
-          <span class="hint mono" id="ext-search-meta" style="margin:0"></span>
         </div>
         <div class="alarm-type-filters" id="ext-type-filters">
-          <span class="hint" style="margin:0">Type filters (ON=show, default all ON):</span>
+          <span class="hint" style="margin:0">Type:</span>
           <div class="cdr-toggle-row" id="ext-type-btns"></div>
         </div>
         <div class="table-wrap alarm-table-wrap">
@@ -352,28 +338,25 @@
     <main class="main hidden" id="panel-alarm" data-panel="alarm">
       <section class="card alarm-card">
         <div class="panel-head">
-          <div>
-            <h2>Active Alarms</h2>
-          </div>
+          <h2>Active Alarms</h2>
           <div class="card-actions-col">
             <div class="card-actions">
-              <span class="countdown-line" id="alarm-countdown">Next: —</span>
-              <span class="trunk-auto-status" id="alarm-auto-status" hidden></span>
               <div class="alarm-actions" id="alarm-active-actions">
                 <button type="button" class="btn" id="btn-alarm-ack" title="Stop webpage flash only — does NOT clear alarms on CM">Ack (stop flash)</button>
                 <button type="button" class="btn cdr-toggle" id="btn-flash-yellow" data-manual-flash="minor" title="Manual deep yellow flash test">Flash Yellow</button>
                 <button type="button" class="btn cdr-toggle" id="btn-flash-red" data-manual-flash="major" title="Manual deep red flash test">Flash Red</button>
               </div>
+              <span class="trunk-auto-status" id="alarm-auto-status">Waiting for Auto…</span>
             </div>
           </div>
         </div>
         <div class="map-stat-row alarm-stat-row" id="alarm-summary-kpi" aria-label="Alarm summary"></div>
         <div class="alarm-type-filters" id="alarm-search-filters">
-          <span class="hint" style="margin:0">Search (contains):</span>
+          <span class="hint" style="margin:0">Search:</span>
           <input type="search" id="alarm-search" class="gw-search" placeholder="date / severity / mtce / port / status" autocomplete="off" />
         </div>
         <div class="alarm-type-filters" id="alarm-type-filters">
-          <span class="hint" style="margin:0">Mtce type filters (ON=show, default all ON):</span>
+          <span class="hint" style="margin:0">Mtce type:</span>
           <div class="cdr-toggle-row" id="alarm-type-btns"></div>
         </div>
         <div class="table-wrap alarm-table-wrap">
@@ -388,7 +371,7 @@
               </tr>
             </thead>
             <tbody id="alarm-tbody">
-              <tr class="empty"><td colspan="5">Login then open Alarm tab — polls every 90s.</td></tr>
+              <tr class="empty"><td colspan="5">Login required for live OSSI alarms.</td></tr>
             </tbody>
           </table>
         </div>
@@ -398,26 +381,19 @@
     <main class="main hidden" id="panel-gateway" data-panel="gateway">
       <section class="card alarm-card" id="gateway-card">
         <div class="panel-head">
-          <div>
-            <h2>Media Gateway Status</h2>
-          </div>
+          <h2>Media Gateway Status</h2>
           <div class="card-actions-col">
             <div class="card-actions">
-              <span class="countdown-line" id="gw-countdown">Next: —</span>
-              <span class="trunk-auto-status" id="gw-auto-status" hidden></span>
+              <span class="trunk-auto-status" id="gw-auto-status">Waiting for Auto…</span>
             </div>
           </div>
         </div>
         <div id="gw-list-view">
-        <div class="map-stat-row gw-stat-row" id="gw-summary-kpi" aria-label="Gateway summary">
+        <div class="map-stat-row" id="gw-summary-kpi" aria-label="Gateway summary">
           <div class="map-stat" id="gw-stat-online-card">
             <div class="map-stat-k">Online</div>
             <div class="map-stat-v" id="gw-stat-online">—</div>
             <div class="map-stat-sub">Online / Total</div>
-          </div>
-          <div class="map-stat accent-red">
-            <div class="map-stat-k">DOWN</div>
-            <div class="map-stat-v" id="gw-stat-down">—</div>
           </div>
           <div class="map-stat accent-red">
             <div class="map-stat-k">Major</div>
@@ -437,9 +413,8 @@
           </div>
         </div>
         <div class="alarm-type-filters" id="gw-search-filters">
-          <span class="hint" style="margin:0">Search hostname / IP (contains):</span>
+          <span class="hint" style="margin:0">Search:</span>
           <input type="search" id="gw-search" class="gw-search" placeholder="e.g. L  or  172.29.88" autocomplete="off" />
-          <span class="hint mono" id="gw-list-count" style="margin:0"></span>
         </div>
         <div class="table-wrap alarm-table-wrap">
           <table class="data-table" id="gw-table">
@@ -455,7 +430,7 @@
               </tr>
             </thead>
             <tbody id="gw-tbody">
-              <tr class="empty"><td colspan="7">Login then open Gateway tab — polls every 90s.</td></tr>
+              <tr class="empty"><td colspan="7">Login required for live gateways.</td></tr>
             </tbody>
           </table>
         </div>
@@ -464,7 +439,6 @@
           <div class="gw-ident">
             <button type="button" class="btn" id="btn-gw-detail-back">← Back</button>
             <div class="gw-ident-text">
-              <div class="gw-ident-mg mono" id="gw-detail-mg">MG —</div>
               <h3 id="gw-detail-title">—</h3>
               <p class="hint" id="gw-detail-meta"></p>
             </div>
@@ -493,10 +467,6 @@
               <div class="map-stat-sub">Used / Total</div>
             </div>
           </div>
-          <div class="alarm-type-filters" id="gw-detail-search-filters">
-            <span class="hint" style="margin:0">Search (contains):</span>
-            <input type="search" id="gw-detail-search" class="gw-search" placeholder="slot / board / ext / name / port" autocomplete="off" />
-          </div>
           <h3 class="gw-detail-h">Media Modules</h3>
           <div class="table-wrap gw-detail-table-wrap">
             <table class="data-table gw-detail-table" id="gw-board-table">
@@ -510,6 +480,10 @@
               </thead>
               <tbody id="gw-board-tbody"></tbody>
             </table>
+          </div>
+          <div class="alarm-type-filters" id="gw-detail-search-filters">
+            <span class="hint" style="margin:0">Search:</span>
+            <input type="search" id="gw-detail-search" class="gw-search" placeholder="ext / name / port / card" autocomplete="off" />
           </div>
           <h3 class="gw-detail-h">Assigned ports</h3>
           <div class="table-wrap gw-detail-table-wrap">
@@ -533,21 +507,15 @@
     <main class="main hidden" id="panel-map" data-panel="map">
       <section class="card map-card" id="map-card">
         <div class="panel-head">
-          <div>
-            <h2>Map View</h2>
-            <p class="hint">Offline HK map · site pin from <span class="mono">map/sites.json</span> · lights from Gateway cache (WN = green)</p>
-          </div>
+          <h2>Map View</h2>
           <div class="card-actions-col">
             <div class="card-actions">
-              <span class="countdown-line" id="map-countdown">Next: —</span>
-              <span class="trunk-auto-status" id="map-auto-status" hidden></span>
-            </div>
-            <div class="legend-block">
               <div class="legend">
-                <span class="lg green"></span>OK / Warning
+                <span class="lg green"></span>OK
                 <span class="lg yellow"></span>Minor
                 <span class="lg red"></span>Major / DOWN
               </div>
+              <span class="trunk-auto-status" id="map-auto-status">Waiting for Auto…</span>
             </div>
           </div>
         </div>
@@ -578,7 +546,7 @@
           </div>
         </div>
         <div class="alarm-type-filters" id="map-search-filters">
-          <span class="hint" style="margin:0">Search site / hostname</span>
+          <span class="hint" style="margin:0">Search:</span>
           <input type="search" id="map-search" class="gw-search" placeholder="CPB / GW43 / 172.29" autocomplete="off" />
         </div>
         <p class="hint map-unmapped" id="map-unmapped" hidden></p>
@@ -684,7 +652,7 @@
         var el = document.getElementById("error-line");
         if (!el) return;
         el.hidden = false;
-        el.textContent = "UI script 未載入。請 Ctrl+F5。仍唔得就開 F12 Console 睇紅字。";
+        el.textContent = "UI script did not load. Press Ctrl+F5. If it still fails, open F12 Console for errors.";
       }
       function onLoginClick(ev) {
         if (ev) ev.preventDefault();
@@ -716,6 +684,6 @@
       }
     })();
   </script>
-  <script src="app.js?v=20260821y" type="module"></script>
+  <script src="app.js?v=20260825k" type="module"></script>
 </body>
 </html>

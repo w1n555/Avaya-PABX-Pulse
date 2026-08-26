@@ -79,20 +79,8 @@ function fmtUpdated(iso) {
   }
 }
 
-function setGwStatus(msg) {
-  const el = document.getElementById("gw-auto-status");
-  if (!el) return;
-  if (!msg) {
-    el.hidden = true;
-    el.textContent = "";
-    el.removeAttribute("title");
-    el.classList.remove("is-updating");
-    return;
-  }
-  el.hidden = false;
-  el.textContent = msg;
-  el.title = msg;
-  el.classList.toggle("is-updating", /Updat|queued|waiting for OSSI|OSSI busy|Auto update…/i.test(msg));
+function setGwStatus(_msg) {
+  /* Auto status chip is owned by app.js paintAutoStatusChip */
 }
 
 function paintGwUpdated() {
@@ -218,13 +206,6 @@ function renderGwTable() {
     return;
   }
   const rows = filteredGwRows();
-  const countEl = document.getElementById("gw-list-count");
-  if (countEl) {
-    const all = (GW.data.items || []).length;
-    const nums = (all ? GW.data.items : []).map((r) => Number(r.mg)).filter((n) => n > 0);
-    const span = nums.length ? `MG ${Math.min(...nums)}–${Math.max(...nums)}` : "";
-    countEl.textContent = all ? `${all} gateways${span ? " · " + span : ""}` : "";
-  }
   if (!rows.length) {
     const q = (GW.query || "").trim();
     const msg = !GW.connected
@@ -259,35 +240,7 @@ function renderGwTable() {
 }
 
 function paintGwCountdown() {
-  const el = document.getElementById("gw-countdown");
-  const det = document.getElementById("gw-detail-countdown");
-  const setBoth = (txt, updating) => {
-    for (const node of [el, det]) {
-      if (!node) continue;
-      node.textContent = txt;
-      node.classList.toggle("is-updating", !!updating);
-    }
-  };
-  if (!GW.connected) {
-    setBoth("Next: —", false);
-    return;
-  }
-  if (GW.loading || GW.ossiBusy) {
-    setBoth("Updating…", true);
-    return;
-  }
-  if (!GW.nextAt) {
-    setBoth("Next: session Auto 90s", false);
-    return;
-  }
-  const sec = Math.min(
-    90,
-    Math.max(0, Math.ceil((GW.nextAt - Date.now()) / 1000))
-  );
-  const extra = GW.detailMg && !document.getElementById("gw-detail-view")?.hidden
-    ? ` · this GW + global`
-    : "";
-  setBoth(`Next: ${sec}s${extra}`, false);
+  /* countdown chip removed — app.js owns Auto status */
 }
 
 export function getOpenGatewayDetailMg() {
@@ -448,14 +401,11 @@ async function loadGateways(opts = {}) {
 }
 
 function startGwCountdownPaint() {
-  if (GW.countdownTimer) return;
-  GW.countdownTimer = setInterval(paintGwCountdown, 250);
+  /* no local countdown timer */
 }
 
 export function setGatewaySessionConnected(connected) {
   GW.connected = !!connected;
-  const btn = document.getElementById("btn-gw-refresh");
-  if (btn) btn.disabled = !GW.connected;
   if (!GW.connected) {
     setGwStatus("");
     paintGwCountdown();
@@ -555,7 +505,6 @@ function showGwDetailPane() {
 
 function paintGwDetailHeader(mg) {
   const row = gwRowByMg(mg) || {};
-  setText("gw-detail-mg", `MG ${mg}`);
   setText("gw-detail-title", row.hostname || "—");
   const meta = document.getElementById("gw-detail-meta");
   if (meta) {

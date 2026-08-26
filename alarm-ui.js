@@ -6,7 +6,7 @@
  */
 
 import { showProgress, setProgress, finishProgress } from "./cdr-ui.js";
-import { getGatewayMjMn } from "./gateway-ui.js?v=20260821y";
+import { getGatewayMjMn } from "./gateway-ui.js?v=20260825i";
 
 /** Magic TG for refresh/one when CmApi has no /alarms route. */
 const TG_ACTIVE = 9996;
@@ -125,20 +125,8 @@ export function applyAlarmFlash() {
 
 if (typeof window !== "undefined") window.__cmApplyAlarmFlash = applyAlarmFlash;
 
-function setAlarmStatus(msg) {
-  const el = document.getElementById("alarm-auto-status");
-  if (!el) return;
-  if (!msg) {
-    el.hidden = true;
-    el.textContent = "";
-    el.removeAttribute("title");
-    el.classList.remove("is-updating");
-    return;
-  }
-  el.hidden = false;
-  el.textContent = msg;
-  el.title = msg;
-  el.classList.toggle("is-updating", /Updat|queued|waiting for OSSI|OSSI busy|Auto update…/i.test(msg));
+function setAlarmStatus(_msg) {
+  /* Auto status chip is owned by app.js paintAutoStatusChip */
 }
 
 function paintAlarmUpdated() {
@@ -268,29 +256,7 @@ function renderAlarmTable() {
 }
 
 function paintAlarmCountdown() {
-  const el = document.getElementById("alarm-countdown");
-  if (!el) return;
-  const set = (txt, updating) => {
-    el.textContent = txt;
-    el.classList.toggle("is-updating", !!updating);
-  };
-  if (!ALARM.connected) {
-    set("Next: —", false);
-    return;
-  }
-  if (ALARM.loading || ALARM.ossiBusy) {
-    set("Updating…", true);
-    return;
-  }
-  if (!ALARM.nextAt) {
-    set("Next: session Auto 90s", false);
-    return;
-  }
-  const sec = Math.min(
-    90,
-    Math.max(0, Math.ceil((ALARM.nextAt - Date.now()) / 1000))
-  );
-  set(`Next: ${sec}s`, false);
+  /* countdown chip removed — app.js owns Auto status */
 }
 
 function applyAlarmPayload(data) {
@@ -429,14 +395,11 @@ async function loadAlarms(opts = {}) {
 }
 
 function startCountdownPaint() {
-  if (ALARM.countdownTimer) return;
-  ALARM.countdownTimer = setInterval(paintAlarmCountdown, 250);
+  /* no local countdown timer */
 }
 
 export function setAlarmSessionConnected(connected) {
   ALARM.connected = !!connected;
-  const btn = document.getElementById("btn-alarm-refresh");
-  if (btn) btn.disabled = !ALARM.connected;
   if (!ALARM.connected) {
     document.body.classList.remove("alarm-bg-major", "alarm-bg-minor");
     ALARM.manualYellow = false;
@@ -518,30 +481,6 @@ export function initAlarmUi() {
       renderAlarmTable();
     });
   }
-
-  document.getElementById("btn-alarm-refresh")?.addEventListener("click", async () => {
-    const btn = document.getElementById("btn-alarm-refresh");
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = "Refreshing…";
-    }
-    try {
-      if (ALARM.ossiBusy) {
-        setAlarmStatus("OSSI busy (Trunk updating) — will refresh when free");
-        ALARM.pendingSilent = true;
-        return;
-      }
-      await loadAlarms({ force: true, showModal: true });
-    } catch (e) {
-      setAlarmStatus(String(e.message || e));
-      finishProgress(false, String(e.message || e));
-    } finally {
-      if (btn) {
-        btn.disabled = !ALARM.connected;
-        btn.textContent = "Refresh";
-      }
-    }
-  });
 
   document.getElementById("btn-alarm-ack")?.addEventListener("click", () => {
     ALARM.ackedFp = alarmFingerprint(ALARM.data.active);

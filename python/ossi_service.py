@@ -109,9 +109,10 @@ PATHS = _Paths()
 ALARMS_PUBLIC = _SITE_ROOT / "alarms_cache.json"
 GATEWAYS_PUBLIC = _SITE_ROOT / "gateways_cache.json"
 EXTENSIONS_PUBLIC = _SITE_ROOT / "extensions_cache.json"
-AUTO_REFRESH_SEC = 60
-# If no UI heartbeat / page activity for this long → logoff OSSI (browser closed)
-UI_GONE_SEC = 90
+AUTO_REFRESH_SEC = 90
+# Close-tab logoff. 90s was too tight: Chrome background tabs throttle
+# setInterval to ~60s, one missed beat then logged the user off mid-use.
+UI_GONE_SEC = 300
 # Watchdog tick (check UI gone more often than full trunk refresh)
 UI_WATCH_SEC = 15
 
@@ -142,6 +143,11 @@ _last_extension_at = 0.0
 _gw_config_by_mg: dict[int, dict[str, Any]] = {}
 # Which UI tab is open (from heartbeat) — only that tab's OSSI auto work runs
 _ui_active_tab: str = "trunk"
+_next_refresh_mono = 0.0  # time.monotonic deadline; 0 = not armed
+_ui_open_mg = 0  # 0 = none; set from heartbeat openMg
+_ui_packing = False  # frontend Login/manual pack in flight; do not start auto pack
+_auto_packing = False  # True for the whole backend 90s pack (trunks+alarms+gw)
+_pack_phase = ""  # trunks | alarms | gateways | config
 
 
 def _now_iso() -> str:
@@ -291,6 +297,9 @@ def write_trunk_data(
         "refreshing": bool(_refreshing if refreshing is None else refreshing),
         "items": items,
     }
+    obj.update(_schedule_public())
+    if refreshing is not None:
+        obj["refreshing"] = bool(refreshing)
     _write_json(PATHS.trunk_data, obj)
     return obj
 
@@ -354,13 +363,50 @@ def touch_ui() -> None:
 
 
 def ui_is_present() -> bool:
+    # In-flight OSSI (pack / list extension) is driven by this dashboard —
+    # do not log off mid-command if a heartbeat was delayed.
+    if _refreshing or _ossi_lock.locked():
+        return True
     if _last_ui_seen <= 0:
         return False
     return (time.monotonic() - _last_ui_seen) <= UI_GONE_SEC
 
 
+def _arm_next_refresh(from_now=AUTO_REFRESH_SEC):
+    global _next_refresh_mono
+    _next_refresh_mono = time.monotonic() + max(1.0, float(from_now))
+
+
+def _seconds_until_refresh() -> int:
+    if _next_refresh_mono <= 0:
+        return 0
+    return max(0, int(round(_next_refresh_mono - time.monotonic())))
+
+
+def _schedule_public() -> dict:
+    return {
+        "autoIntervalSec": AUTO_REFRESH_SEC,
+        "refreshing": bool(_refreshing or _auto_packing or _ossi_lock.locked()),
+        "secondsUntilRefresh": _seconds_until_refresh(),
+        "nextRefreshAt": None,  # frontend derives from secondsUntilRefresh
+        "openMg": _ui_open_mg or None,
+        "packPhase": _pack_phase or None,
+    }
+
+
+def _as_bool(v: Any) -> bool:
+    if isinstance(v, bool):
+        return v
+    if v is None:
+        return False
+    if isinstance(v, (int, float)):
+        return v != 0
+    return str(v).strip().lower() in ("1", "true", "yes", "on")
+
+
 def disconnect_unlocked() -> None:
     global _session, _cfg, _connected, _last_error
+    global _next_refresh_mono, _ui_open_mg, _ui_packing, _auto_packing, _pack_phase
     if _session is not None:
         try:
             _session.close()
@@ -369,6 +415,11 @@ def disconnect_unlocked() -> None:
     _session = None
     _cfg = None
     _connected = False
+    _next_refresh_mono = 0.0
+    _ui_open_mg = 0
+    _ui_packing = False
+    _auto_packing = False
+    _pack_phase = ""
 
 
 def connect_unlocked(body: dict[str, Any]) -> dict[str, Any]:
@@ -433,6 +484,7 @@ def connect_unlocked(body: dict[str, Any]) -> dict[str, Any]:
         _tg_catalog = {}
 
     touch_ui()  # Login counts as UI present
+    _arm_next_refresh(AUTO_REFRESH_SEC)  # first auto pack 90s after login (login pack is UI)
 
     # First trunk poll is done by caller OUTSIDE _lock so heartbeat stays free
     return {
@@ -713,6 +765,7 @@ def session_public() -> dict[str, Any]:
         # Topbar System Time only (UI polls every 60s)
         "systemTime": (cm or {}).get("systemTime"),
         "cmTime": cm,
+        **_schedule_public(),
     }
 
 
@@ -954,32 +1007,113 @@ def fetch_cm_time(*, force: bool = False) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Auto refresh thread — only while UI is open; logoff when page gone
+# Auto refresh thread — UI-gone logoff + backend-owned 90s pack
 # ---------------------------------------------------------------------------
+
+
+def run_auto_pack() -> None:
+    """
+    Backend Auto pack: status trunk (each monitored TG), display alarms,
+    list media-gateway, then open-MG list configuration. No list extension.
+    Does not hold _lock during OSSI I/O. Never raises to the watchdog thread.
+    """
+    global _refreshing, _auto_packing, _pack_phase
+    started = False
+    try:
+        with _lock:
+            if not _connected or _session is None:
+                return
+            if _ui_packing or _refreshing or _auto_packing or _ossi_lock.locked():
+                return
+            _refreshing = True
+            _auto_packing = True
+            _pack_phase = "trunks"
+            started = True
+            by = _load_trunk_items_map()
+            write_trunk_data(list(by.values()), error=None, refreshing=True)
+        try:
+            refresh_unlocked()
+        except Exception:
+            pass
+        with _lock:
+            # refresh_unlocked() clears _refreshing at end — keep pack flag until done
+            if _connected and _session is not None:
+                _refreshing = True
+                _auto_packing = True
+                _pack_phase = "alarms"
+                by = _load_trunk_items_map()
+                write_trunk_data(list(by.values()), error=None, refreshing=True)
+        try:
+            refresh_alarms()
+        except Exception:
+            pass
+        with _lock:
+            if _connected and _session is not None:
+                _pack_phase = "gateways"
+                by = _load_trunk_items_map()
+                write_trunk_data(list(by.values()), error=None, refreshing=True)
+        try:
+            refresh_gateways()
+        except Exception:
+            pass
+        mg = 0
+        with _lock:
+            mg = int(_ui_open_mg or 0)
+            if mg >= 1:
+                _pack_phase = "config"
+                by = _load_trunk_items_map()
+                write_trunk_data(list(by.values()), error=None, refreshing=True)
+        if mg >= 1:
+            try:
+                refresh_gateway_config(mg)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    finally:
+        if not started:
+            return
+        try:
+            with _lock:
+                _refreshing = False
+                _auto_packing = False
+                _pack_phase = ""
+                _arm_next_refresh(AUTO_REFRESH_SEC)
+                by = _load_trunk_items_map()
+                write_trunk_data(list(by.values()), error=None, refreshing=False)
+        except Exception:
+            _refreshing = False
+            _auto_packing = False
+            _pack_phase = ""
+            try:
+                _arm_next_refresh(AUTO_REFRESH_SEC)
+            except Exception:
+                pass
 
 
 def _auto_loop() -> None:
     """
-    Watchdog only (no background Trunk/Alarm OSSI polls).
+    Watchdog + backend Auto 90s pack.
 
-    AUTO 60s is driven solely by the open browser tab:
-      - Trunk tab + Auto checked → progressive status trunk from app.js
-      - Alarm tab → display alarms from alarm-ui.js
-      - Gateway tab → list media-gateway from gateway-ui.js
-      - CDR / other → no heavy OSSI auto
-
-    Reason: CmApi heartbeat historically drops {tab}; if this loop still
-    polled, Trunk would keep stealing OSSI while Alarm/CDR is open.
+    Heartbeat still comes from the browser — do not log off just because
+    a pack is running. UI-gone disconnect is unchanged (UI_GONE_SEC).
+    Pack order: status trunk N × monitored TGs, display alarms,
+    list media-gateway, open MG list configuration. No list extension.
     """
     global _last_error
     while not _stop.is_set():
         if _stop.wait(UI_WATCH_SEC):
             break
+        do_pack = False
         with _lock:
             if not _connected or _session is None:
                 continue
             if not ui_is_present():
                 try:
+                    print(
+                        f"ossi-bridge: UI silent >{UI_GONE_SEC}s — OSSI logged off",
+                        flush=True,
+                    )
                     disconnect_unlocked()
                     # Keep last TG rows; only mark offline (UI should not flash empty)
                     by = _load_trunk_items_map()
@@ -988,7 +1122,20 @@ def _auto_loop() -> None:
                 except Exception as exc:
                     _last_error = str(exc)
                 continue
-            # UI present — leave OSSI work to the open tab's browser AUTO 60s
+            # UI present — backend-owned 90s Auto pack (frontend displays countdown + cache)
+            if _ui_packing:
+                continue
+            if _refreshing or _ossi_lock.locked():
+                continue
+            if _next_refresh_mono <= 0:
+                _arm_next_refresh(AUTO_REFRESH_SEC)
+            if time.monotonic() >= _next_refresh_mono:
+                do_pack = True
+        if do_pack:
+            try:
+                run_auto_pack()
+            except Exception:
+                pass
 
 
 def _alarm_summary(active: list[dict[str, Any]]) -> dict[str, int]:
@@ -1190,6 +1337,7 @@ def refresh_gateways() -> dict[str, Any]:
                 "list media-gateway",
                 max_more_pages=80,
                 retry_on_error=False,
+                more_idle=3.0,
             )
             text = st.text or ""
             sec = round(time.perf_counter() - t0, 2)
@@ -1719,11 +1867,13 @@ class Handler(BaseHTTPRequestHandler):
                 with _lock:
                     live = _connected
                     cm = _last_cm_time
+                    sched = _schedule_public()
                 data = _read_json(PATHS.trunk_data, {"items": [], "connected": False})
                 if not isinstance(data, dict):
                     data = {"items": [], "connected": False}
                 # Always override file cache with live session flag (stale connected:true was misleading UI)
                 data["connected"] = live
+                data.update(sched)
                 if not live:
                     # keep last host/items for display, but never claim Monitoring from disk alone
                     data["connected"] = False
@@ -1943,38 +2093,45 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"ok": True, "connected": False})
                 return
             if path in ("/session/heartbeat", "/heartbeat"):
-                # Stamp UI present + which tab is open (drives backend auto work).
-                # Optionally refresh System Time if older than ~55s.
-                global _ui_active_tab
+                # Stamp UI present + which tab is open.
+                # NEVER run display time here — fetch_cm_time waits on _ossi_lock
+                # and CmApi PostLightAsync times out at 8s, so the beat never
+                # reaches this handler while a pack is running. Watchdog then
+                # treats the UI as gone and logs off mid-use.
+                global _ui_active_tab, _ui_open_mg, _ui_packing
                 touch_ui()
                 tab = str(body.get("tab") or body.get("Tab") or "").strip().lower()
-                if tab in (
-                    "trunk",
-                    "alarm",
-                    "gateway",
-                    "cdr",
-                    "station",
-                    "extension",
-                    "map",
-                    "vdn",
-                ):
-                    with _lock:
-                        _ui_active_tab = tab
+                raw_mg = body.get("openMg")
+                if raw_mg is None:
+                    raw_mg = body.get("OpenMg")
                 try:
-                    skip_time = bool(body.get("skipTime") or body.get("SkipTime"))
-                    if (
-                        _connected
-                        and not skip_time
-                        and not _ossi_lock.locked()
-                        and (
-                            _last_cm_time_mono <= 0
-                            or (time.monotonic() - _last_cm_time_mono) >= 55
-                        )
-                    ):
-                        fetch_cm_time(force=True)
-                except Exception:
-                    pass
+                    mg_i = int(raw_mg) if raw_mg is not None and str(raw_mg).strip() != "" else 0
+                except (TypeError, ValueError):
+                    mg_i = 0
+                raw_pack = body.get("packing")
+                if raw_pack is None:
+                    raw_pack = body.get("Packing")
+                packing = _as_bool(raw_pack)
                 with _lock:
+                    if tab in (
+                        "trunk",
+                        "alarm",
+                        "gateway",
+                        "cdr",
+                        "station",
+                        "extension",
+                        "map",
+                        "vdn",
+                    ):
+                        _ui_active_tab = tab
+                    _ui_open_mg = mg_i if mg_i >= 1 else 0
+                    was_packing = _ui_packing
+                    _ui_packing = packing
+                    # While UI pack is in flight, skip auto. When it ends, if the
+                    # deadline already passed, wait a full interval (no double pack).
+                    if not packing and was_packing:
+                        if _next_refresh_mono <= 0 or time.monotonic() >= _next_refresh_mono:
+                            _arm_next_refresh(AUTO_REFRESH_SEC)
                     st = session_public()
                 self._send(200, {"ok": True, **st})
                 return

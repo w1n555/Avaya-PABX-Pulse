@@ -144,6 +144,7 @@ class OssiSession:
         retry_on_error: bool = True,
         max_more_pages: int | None = None,
         form_fields: list[str] | None = None,
+        more_idle: float | None = None,
     ) -> CommandResult:
         """
         Run one RO OSSI command.
@@ -154,6 +155,9 @@ class OssiSession:
         form_fields: optional OSSI form values after ``c`` and before ``t``.
         Each entry is a field payload without the leading ``f`` (e.g. ``0001y``)
         or a full ``f…`` line. Used by form commands like ``display alarms``.
+
+        more_idle: seconds of silence after a more?[y] page before treating the
+        list as complete. Does not change the command read_timeout. None = default.
         """
         cmd = assert_readonly_command(command)
         with self._lock:
@@ -162,6 +166,7 @@ class OssiSession:
                 retry_on_error=retry_on_error,
                 max_more_pages=max_more_pages,
                 form_fields=form_fields,
+                more_idle=more_idle,
             )
 
     def touch(self) -> None:
@@ -296,6 +301,7 @@ class OssiSession:
         *,
         max_more_pages: int,
         form_fields: list[str] | None = None,
+        more_idle: float | None = None,
     ) -> tuple[str, int, bool]:
         chan = self._chan
         if chan is None:
@@ -366,7 +372,11 @@ class OssiSession:
             elif chunks:
                 # After more?, do not stop on "t" (it appears mid-page). Wait for quiet.
                 # Longer idle after multi-page lists so tail pages are not left on wire.
-                idle = 1.05 if last_more_at > 0 else 0.6
+                # more_idle is per-command (e.g. 3s for list media-gateway) — not global timeout.
+                if last_more_at > 0:
+                    idle = 1.05 if more_idle is None else max(1.05, float(more_idle))
+                else:
+                    idle = 0.6
                 if (time.monotonic() - last) >= idle:
                     break
             else:
@@ -397,6 +407,7 @@ class OssiSession:
         retry_on_error: bool,
         max_more_pages: int | None,
         form_fields: list[str] | None = None,
+        more_idle: float | None = None,
     ) -> CommandResult:
         used_existing = False
         did_login = False
@@ -410,7 +421,10 @@ class OssiSession:
         try:
             used_existing, did_login = self._ensure_session_unlocked()
             raw, more, trunc = self._run_command_unlocked(
-                command, max_more_pages=page_cap, form_fields=fields
+                command,
+                max_more_pages=page_cap,
+                form_fields=fields,
+                more_idle=more_idle,
             )
             if retry_on_error and ossi_has_error(raw) and not trunc:
                 retried = True
@@ -418,7 +432,10 @@ class OssiSession:
                 _, did_login = self._ensure_session_unlocked()
                 did_login = True
                 raw, more, trunc = self._run_command_unlocked(
-                    command, max_more_pages=page_cap, form_fields=fields
+                    command,
+                    max_more_pages=page_cap,
+                    form_fields=fields,
+                    more_idle=more_idle,
                 )
             self._touch_unlocked()
             self._command_count += 1
@@ -454,7 +471,10 @@ class OssiSession:
                 _, did_login = self._ensure_session_unlocked()
                 did_login = True
                 raw, more, trunc = self._run_command_unlocked(
-                    command, max_more_pages=page_cap, form_fields=fields
+                    command,
+                    max_more_pages=page_cap,
+                    form_fields=fields,
+                    more_idle=more_idle,
                 )
                 self._touch_unlocked()
                 self._command_count += 1

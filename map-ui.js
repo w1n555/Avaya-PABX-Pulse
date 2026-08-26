@@ -7,7 +7,7 @@
  * CM as 1 if it has its own (non-GGGV*) alarm, e.g. 1 G450 + 1 CM T1 = 2.
  */
 
-import { openGatewayDetail } from "./gateway-ui.js?v=20260821y";
+import { openGatewayDetail } from "./gateway-ui.js?v=20260825i";
 
 function apiUrlMap(path) {
   let dir = window.location.pathname || "/";
@@ -117,31 +117,11 @@ function latestMapTs() {
 }
 
 function paintMapCountdown() {
-  const el = document.getElementById("map-countdown");
-  if (!el) return;
-  if (!MAP.connected) {
-    el.textContent = "Next: —";
-    el.classList.remove("is-updating");
-    return;
-  }
-  if (MAP.ossiBusy) {
-    el.textContent = "Updating…";
-    el.classList.add("is-updating");
-    return;
-  }
-  if (!MAP.nextAt) {
-    el.textContent = "Next: session Auto 90s";
-    el.classList.remove("is-updating");
-    return;
-  }
-  const sec = Math.min(90, Math.max(0, Math.ceil((MAP.nextAt - Date.now()) / 1000)));
-  el.textContent = `Next: ${sec}s`;
-  el.classList.remove("is-updating");
+  /* countdown chip removed — app.js owns Auto status */
 }
 
 function startMapCountdownPaint() {
-  if (MAP.countdownTimer) return;
-  MAP.countdownTimer = setInterval(paintMapCountdown, 250);
+  /* no local countdown timer */
 }
 
 export function syncMapCountdown(nextAtMs) {

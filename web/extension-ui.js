@@ -130,20 +130,8 @@ function fmtUpdated(iso) {
   }
 }
 
-function setExtStatus(msg) {
-  const el = document.getElementById("ext-auto-status");
-  if (!el) return;
-  if (!msg) {
-    el.hidden = true;
-    el.textContent = "";
-    el.removeAttribute("title");
-    el.classList.remove("is-updating");
-    return;
-  }
-  el.hidden = false;
-  el.textContent = msg;
-  el.title = msg;
-  el.classList.toggle("is-updating", /Updat|queued|waiting for OSSI|OSSI busy|Auto update…/i.test(msg));
+function setExtStatus(_msg) {
+  /* Auto status chip is owned by app.js paintAutoStatusChip */
 }
 
 function paintExtUpdated() {
@@ -228,16 +216,6 @@ function paintExtSummary() {
       </div>`
     )
     .join("");
-
-  const meta = document.getElementById("ext-search-meta");
-  if (meta) {
-    const capped = filtered.length > SHOW_CAP;
-    meta.textContent =
-      total === 0
-        ? "No extensions in cache yet"
-        : `Matched ${filtered.length} extension(s) · showing ${shown}${capped ? " (capped)" : ""}`;
-    meta.classList.toggle("is-capped", capped);
-  }
 }
 
 function renderExtTable() {
@@ -271,34 +249,7 @@ function renderExtTable() {
 }
 
 function paintExtCountdown() {
-  const el = document.getElementById("ext-countdown");
-  if (!el) return;
-  const set = (txt, updating) => {
-    el.textContent = txt;
-    el.classList.toggle("is-updating", !!updating);
-  };
-  if (!EXT.connected) {
-    set("Next: —", false);
-    return;
-  }
-  if (EXT.loading) {
-    set("Updating…", true);
-    return;
-  }
-  if (!EXT.nextAt) {
-    set("Next: hourly", false);
-    return;
-  }
-  const sec = Math.max(0, Math.ceil((EXT.nextAt - Date.now()) / 1000));
-  if (sec >= 3600) {
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    set(`Next: ${h}h ${m}m`, false);
-  } else if (sec >= 60) {
-    set(`Next: ${Math.floor(sec / 60)}m ${sec % 60}s`, false);
-  } else {
-    set(`Next: ${sec}s`, false);
-  }
+  /* countdown chip removed — app.js owns Auto status */
 }
 
 function applyExtPayload(data) {
@@ -462,14 +413,11 @@ async function loadExtensions(opts = {}) {
 }
 
 function startExtCountdownPaint() {
-  if (EXT.countdownTimer) return;
-  EXT.countdownTimer = setInterval(paintExtCountdown, 1000);
+  /* no local countdown timer */
 }
 
 export function setExtensionSessionConnected(connected) {
   EXT.connected = !!connected;
-  const btn = document.getElementById("btn-ext-refresh");
-  if (btn) btn.disabled = !EXT.connected;
   if (!EXT.connected) {
     setExtStatus("");
     EXT.nextAt = 0;
