@@ -66,34 +66,48 @@ def parse_trunk_groups(ossi_text: str) -> dict[int, dict[str, Any]]:
         typ = ""
         name = ""
         total = 0
-        # Heuristic: type token, then name, then members count near end
+        # Typical: tg, TAC, type, name, members (tabs). Type may be isdn-pri / sip-did / …
+        if len(parts) >= 3:
+            p2 = parts[2].strip()
+            if p2 and not p2.isdigit():
+                typ = p2
+        if len(parts) >= 4:
+            last = parts[-1].strip()
+            if last.isdigit():
+                total = int(last)
+                name = " ".join(p.strip() for p in parts[3:-1] if p.strip())
+            else:
+                name = " ".join(p.strip() for p in parts[3:] if p.strip())
         rest = [p.strip() for p in parts[2:] if p.strip()]
-        type_re = re.compile(r"^(isdn|sip|wats|co|tie|pri|fxo|fxs|h\.323|atm)$", re.I)
-        for i, tok in enumerate(rest):
-            if type_re.match(tok):
-                typ = tok
-                name_parts = []
-                for j in range(i + 1, len(rest)):
-                    if rest[j].isdigit() and j == len(rest) - 1:
-                        total = int(rest[j])
-                    elif rest[j].isdigit() and j >= len(rest) - 2:
-                        # sometimes extra cols; last int is members
-                        try:
-                            total = int(rest[-1])
-                        except ValueError:
-                            pass
-                    else:
-                        if not rest[j].isdigit():
-                            name_parts.append(rest[j])
-                name = " ".join(name_parts).strip()
-                if total == 0:
-                    for tok2 in reversed(rest):
-                        if tok2.isdigit():
-                            total = int(tok2)
-                            break
-                break
+        type_re = re.compile(
+            r"^(isdn|sip|wats|co|tie|pri|fxo|fxs|h\.323|atm|isdn-pri|sip-did|qsig|dcp|ip)$",
+            re.I,
+        )
+        if not typ:
+            for i, tok in enumerate(rest):
+                if type_re.match(tok):
+                    typ = tok
+                    name_parts = []
+                    for j in range(i + 1, len(rest)):
+                        if rest[j].isdigit() and j == len(rest) - 1:
+                            total = int(rest[j])
+                        elif rest[j].isdigit() and j >= len(rest) - 2:
+                            try:
+                                total = int(rest[-1])
+                            except ValueError:
+                                pass
+                        else:
+                            if not rest[j].isdigit():
+                                name_parts.append(rest[j])
+                    if not name:
+                        name = " ".join(name_parts).strip()
+                    if total == 0:
+                        for tok2 in reversed(rest):
+                            if tok2.isdigit():
+                                total = int(tok2)
+                                break
+                    break
         if not typ and rest:
-            # d1 1401 isdn OUTSIDE CALL 23 style already split poorly
             joined = " ".join(parts)
             m2 = re.search(
                 r"(\d{1,4})\s+(\d{3,5})\s+(isdn|sip|wats)\s+(.+?)\s+(\d{1,3})\b",

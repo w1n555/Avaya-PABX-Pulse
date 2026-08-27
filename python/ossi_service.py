@@ -69,10 +69,18 @@ from gateway_parse import (  # noqa: E402
     scan_gw_hw_faults,
 )
 from extension_parse import (  # noqa: E402
+    _EXT_RE,
     extension_summary,
     merge_extension_ports,
+    merge_udp_into_extensions,
+    parse_display_hunt,
+    parse_display_station,
+    parse_display_vdn,
+    parse_status_station,
     parse_list_extension,
     parse_list_station,
+    parse_list_uniform_dialplan,
+    udp_list_ok,
 )
 
 # ---------------------------------------------------------------------------
@@ -476,8 +484,15 @@ def connect_unlocked(body: dict[str, Any]) -> dict[str, Any]:
     except Exception:
         pass
 
-    # catalog names (capped pages — safe sample; usually enough for TG list)
-    cat = sess.run("list trunk-group", max_more_pages=15)
+    # catalog names — wait more?[y] (same 3s tail as other long lists)
+    cat = sess.run("list trunk-group", max_more_pages=200, more_idle=3.0)
+    try:
+        PATHS.data_dir.mkdir(parents=True, exist_ok=True)
+        (PATHS.data_dir / "list_trunk-group_last.txt").write_text(
+            (cat.text or "")[:400000], encoding="utf-8", errors="replace"
+        )
+    except Exception:
+        pass
     if cat.ok:
         _tg_catalog = parse_trunk_groups(cat.text)
     else:
@@ -599,15 +614,30 @@ def refresh_unlocked() -> dict[str, Any]:
     mon_set = set(monitored)
     by_tg = {k: v for k, v in by_tg.items() if k in mon_set}
 
-    # catalog if empty (one OSSI call)
-    if not catalog:
+    def _catalog_missing() -> bool:
+        for t in monitored:
+            meta = catalog.get(t) or {}
+            nm = str(meta.get("name") or "").strip()
+            if not nm or nm == f"TG {t}":
+                return True
+        return False
+
+    # catalog if empty or monitored TGs still have fallback names
+    if not catalog or _catalog_missing():
         with _ossi_lock:
             with _lock:
                 if not _connected or _session is None:
                     _refreshing = False
                     return write_trunk_data(list(by_tg.values()), error="Not connected", refreshing=False)
                 sess = _session
-            cat = sess.run("list trunk-group", max_more_pages=15)
+            cat = sess.run("list trunk-group", max_more_pages=200, more_idle=3.0)
+        try:
+            PATHS.data_dir.mkdir(parents=True, exist_ok=True)
+            (PATHS.data_dir / "list_trunk-group_last.txt").write_text(
+                (cat.text or "")[:400000], encoding="utf-8", errors="replace"
+            )
+        except Exception:
+            pass
         if cat.ok:
             with _lock:
                 _tg_catalog = parse_trunk_groups(cat.text)
@@ -664,6 +694,7 @@ def refresh_one_tg(tg: int) -> dict[str, Any]:
     (works through old CmApi /refresh/one when /alarms route is missing).
     Special: tg == GATEWAY_REFRESH_TG (9995) → list media-gateway + alarm join.
     Special: tg == EXTENSION_REFRESH_TG (9994) → list extension inventory.
+    Special: tg = EXTENSION_DETAIL_TG_BASE + ext → display station/vdn/hunt-group.
 
     Per-TG OSSI e-line / miss → row.error only (UI Status "UPDATE FAILED").
     Never promote to global lastError / trunk_data.error (login card stays clean).
@@ -703,6 +734,15 @@ def refresh_one_tg(tg: int) -> dict[str, Any]:
             "gatewayConfig": payload,
             "item": None,
             "gatewayConfigRefresh": True,
+        }
+    if EXTENSION_DETAIL_TG_BASE <= tg_i < EXTENSION_DETAIL_TG_BASE + 10_000_000:
+        ext = str(tg_i - EXTENSION_DETAIL_TG_BASE)
+        payload = refresh_extension_detail(ext)
+        return {
+            "ok": payload.get("ok", True),
+            "extensionDetail": payload,
+            "item": None,
+            "extensionDetailRefresh": True,
         }
     with _lock:
         if not _connected or _session is None:
@@ -1202,6 +1242,8 @@ GATEWAY_REFRESH_TG = 9995
 EXTENSION_REFRESH_TG = 9994
 # refresh/one tg = 990000 + MG  →  list configuration media-gateway N (old CmApi)
 GATEWAY_CONFIG_TG_BASE = 990000
+# refresh/one tg = 8_000_000 + numeric extension → display station/vdn/hunt-group
+EXTENSION_DETAIL_TG_BASE = 8_000_000
 
 
 def _run_display_alarms_form(
@@ -1548,7 +1590,7 @@ def _write_extensions_payload() -> dict[str, Any]:
         "items": items,
         "summary": extension_summary(items),
         "source": "avaya-ossi",
-        "command": "list extension + list station",
+        "command": "list extension + list station + list uniform-dialplan",
     }
     try:
         PATHS.data_dir.mkdir(parents=True, exist_ok=True)
@@ -1567,27 +1609,34 @@ def _write_extensions_payload() -> dict[str, Any]:
 
 
 def refresh_extensions() -> dict[str, Any]:
-    """list extension + list station merge — not part of 60s pack.
+    """list extension + list station + list uniform-dialplan — not part of 90s pack.
 
-    Holds `_ossi_lock` for the whole pair so 60s pack waits (queue), never interleaves.
+    Holds `_ossi_lock` for the whole triple so 90s pack waits (queue), never interleaves.
     """
-    global _extension_items, _last_extension_at
+    global _extension_items, _last_extension_at, _pack_phase
     with _lock:
         if not _connected or _session is None:
             return extensions_public()
         sess = _session
         prev_items = list(_extension_items)
+        _pack_phase = "extensions"
 
     sec = 0.0
     station_sec = 0.0
+    udp_sec = 0.0
     new_items: list[dict[str, Any]] | None = None
     station_map: dict[str, dict[str, str]] = {}
     err: str | None = None
     more_pages = 0
     station_pages = 0
+    udp_pages = 0
     truncated = False
     station_truncated = False
+    udp_truncated = False
     station_err: str | None = None
+    udp_err: str | None = None
+    udp_rows: list[dict[str, Any]] | None = None
+    udp_row_n = 0
     with _ossi_lock:
         t0 = time.perf_counter()
         try:
@@ -1595,6 +1644,7 @@ def refresh_extensions() -> dict[str, Any]:
                 "list extension",
                 max_more_pages=2000,
                 retry_on_error=False,
+                more_idle=3.0,
             )
             text = st.text or ""
             sec = round(time.perf_counter() - t0, 2)
@@ -1647,13 +1697,14 @@ def refresh_extensions() -> dict[str, Any]:
             err = str(exc)
             sec = round(time.perf_counter() - t0, 2)
 
-        # Port overlay — same lock so 60s cannot sneak between the two lists
+        # Port overlay — same lock so 90s cannot sneak between the lists
         t1 = time.perf_counter()
         try:
             st2 = sess.run(
                 "list station",
                 max_more_pages=2000,
                 retry_on_error=False,
+                more_idle=3.0,
             )
             text2 = st2.text or ""
             station_sec = round(time.perf_counter() - t1, 2)
@@ -1680,6 +1731,54 @@ def refresh_extensions() -> dict[str, Any]:
             station_err = str(exc)
             station_sec = round(time.perf_counter() - t1, 2)
 
+        t2 = time.perf_counter()
+        try:
+            def _run_udp():
+                return sess.run(
+                    "list uniform-dialplan",
+                    max_more_pages=2000,
+                    retry_on_error=False,
+                    more_idle=3.0,
+                )
+
+            st3 = _run_udp()
+            text3 = st3.text or ""
+            parsed_udp = parse_list_uniform_dialplan(text3)
+            if not udp_list_ok(text3, parsed_udp):
+                time.sleep(0.45)
+                st3 = _run_udp()
+                text3 = st3.text or ""
+                parsed_udp = parse_list_uniform_dialplan(text3)
+            udp_sec = round(time.perf_counter() - t2, 2)
+            udp_pages = int(getattr(st3, "more_pages", 0) or 0)
+            udp_truncated = bool(getattr(st3, "truncated_pages", False))
+            udp_row_n = len(parsed_udp)
+            dump_ok = udp_list_ok(text3, parsed_udp)
+            try:
+                PATHS.data_dir.mkdir(parents=True, exist_ok=True)
+                dump_name = (
+                    "list_uniform-dialplan_last.txt"
+                    if dump_ok
+                    else "list_uniform-dialplan_bad.txt"
+                )
+                (PATHS.data_dir / dump_name).write_text(
+                    (text3 or "")[:800000], encoding="utf-8", errors="replace"
+                )
+            except Exception:
+                pass
+            if dump_ok:
+                udp_rows = parsed_udp
+            else:
+                udp_err = (
+                    "list uniform-dialplan desync/garbage "
+                    f"(rows={udp_row_n}) — UDP kept previous"
+                )
+                udp_rows = None
+        except Exception as exc:
+            udp_err = str(exc)
+            udp_sec = round(time.perf_counter() - t2, 2)
+            udp_rows = None
+
     kept_prev = False
     with _lock:
         if new_items is not None:
@@ -1700,31 +1799,57 @@ def refresh_extensions() -> dict[str, Any]:
             _extension_items = merge_extension_ports(
                 list(_extension_items), station_map, prev_items
             )
+        try:
+            _extension_items = merge_udp_into_extensions(
+                list(_extension_items), udp_rows, prev_items
+            )
+        except Exception as exc:
+            udp_err = str(exc)
+            try:
+                _extension_items = merge_udp_into_extensions(
+                    list(_extension_items), None, prev_items
+                )
+            except Exception:
+                pass
         _last_extension_at = time.monotonic()
-    payload = _write_extensions_payload()
-    payload["timing"] = {
-        "listSec": sec,
-        "stationSec": station_sec,
-        "rows": len(payload.get("items") or []),
-        "portRows": len(station_map),
-        "morePages": more_pages,
-        "stationMorePages": station_pages,
-        "truncated": truncated,
-        "stationTruncated": station_truncated,
-    }
-    if kept_prev:
-        payload["warning"] = (
-            f"list extension incomplete ({len(new_items or [])}) "
-            f"— kept previous {len(payload.get('items') or [])}"
-        )
-    if err:
-        payload["error"] = err
-        payload["ok"] = bool(payload.get("items"))
-    elif station_err:
-        payload["warning"] = (
-            (payload.get("warning") + " · ") if payload.get("warning") else ""
-        ) + station_err
-    return payload
+    try:
+        payload = _write_extensions_payload()
+        payload["timing"] = {
+            "listSec": sec,
+            "stationSec": station_sec,
+            "udpSec": udp_sec,
+            "rows": len(payload.get("items") or []),
+            "portRows": len(station_map),
+            "udpRows": udp_row_n,
+            "morePages": more_pages,
+            "stationMorePages": station_pages,
+            "udpMorePages": udp_pages,
+            "truncated": truncated,
+            "stationTruncated": station_truncated,
+            "udpTruncated": udp_truncated,
+        }
+        if kept_prev:
+            payload["warning"] = (
+                f"list extension incomplete ({len(new_items or [])}) "
+                f"— kept previous {len(payload.get('items') or [])}"
+            )
+        if err:
+            payload["error"] = err
+            payload["ok"] = bool(payload.get("items"))
+        warn_bits: list[str] = []
+        if payload.get("warning"):
+            warn_bits.append(str(payload["warning"]))
+        if station_err:
+            warn_bits.append(station_err)
+        if udp_err:
+            warn_bits.append(udp_err)
+        if warn_bits:
+            payload["warning"] = " · ".join(warn_bits)
+        return payload
+    finally:
+        with _lock:
+            if _pack_phase == "extensions":
+                _pack_phase = ""
 
 
 def extensions_public() -> dict[str, Any]:
@@ -1744,8 +1869,239 @@ def extensions_public() -> dict[str, Any]:
         "items": [],
         "summary": extension_summary([]),
         "source": "avaya-ossi",
-        "command": "list extension + list station",
+        "command": "list extension + list station + list uniform-dialplan",
     }
+
+
+def _norm_ext_type(typ: str) -> str:
+    t = str(typ or "").strip()
+    if t in ("", "—", "-", "–"):
+        return ""
+    return t
+
+
+def _ext_row_matches(row_ext: str, want: str) -> bool:
+    if row_ext == want:
+        return True
+    if want.isdigit() and _EXT_RE.match(row_ext):
+        m = re.match(r"^(\d+)([A-Za-z]?)$", row_ext)
+        if m and m.group(1) == want:
+            return True
+    return False
+
+
+def _lookup_extension_row(ext: str) -> dict[str, Any] | None:
+    with _lock:
+        items = list(_extension_items)
+    for r in items:
+        if isinstance(r, dict) and _ext_row_matches(str(r.get("extension") or "").strip(), ext):
+            return r
+    for src in (_read_json(PATHS.extensions, None), _read_json(EXTENSIONS_PUBLIC, None)):
+        if not isinstance(src, dict):
+            continue
+        for r in src.get("items") or []:
+            if isinstance(r, dict) and _ext_row_matches(str(r.get("extension") or "").strip(), ext):
+                return r
+    return None
+
+
+def _extension_detail_command(ext: str, typ: str) -> str | None:
+    """Pick one read-only display command from cached list-extension type."""
+    t = _norm_ext_type(typ).lower()
+    if not t:
+        return None
+    if (
+        t in ("announcement", "qsig", "udp-ext", "data-extension")
+        or "announcement" in t
+        or "qsig" in t
+        or "udp" in t
+    ):
+        return None
+    if t in ("vdn-extension", "vdn") or t.startswith("vdn"):
+        return f"display vdn {ext}"
+    if t in ("hunt-group", "hunt") or "hunt" in t:
+        return f"display hunt-group {ext}"
+    if t in ("station-user", "phantom-user"):
+        return f"display station {ext}"
+    if any(
+        k in t
+        for k in ("station", "phantom", "analog", "dcp", "sip", "h.323", "h323", "endpoint")
+    ):
+        return f"display station {ext}"
+    return None
+
+
+def _opt_cache_field(row: dict[str, Any] | None, key: str) -> str | None:
+    if not row:
+        return None
+    s = str(row.get(key) or "").strip()
+    if not s or s in ("—", "-"):
+        return None
+    return s
+
+
+def refresh_extension_detail(ext: str, type_hint: str | None = None) -> dict[str, Any]:
+    """One OSSI `display station|vdn|hunt-group` for the Extension Details pane."""
+    t0 = time.perf_counter()
+    raw_ext = str(ext or "").strip()
+
+    def _payload(**kw: Any) -> dict[str, Any]:
+        out = {
+            "ok": False,
+            "extension": raw_ext,
+            "type": "",
+            "command": None,
+            "formRows": [],
+            "buttons": [],
+            "port": None,
+            "name": None,
+            "setType": None,
+            "error": None,
+            "elapsedSec": round(time.perf_counter() - t0, 2),
+            "fromCache": False,
+            "cacheOnly": False,
+        }
+        out.update(kw)
+        return out
+
+    if not _EXT_RE.match(raw_ext):
+        return _payload(error="invalid extension")
+
+    row = _lookup_extension_row(raw_ext)
+    cache_type = _norm_ext_type(str((row or {}).get("type") or ""))
+    typ = _norm_ext_type(str(type_hint or "")) or cache_type
+    cmd_ext = str((row or {}).get("extension") or raw_ext).strip()
+    if not _EXT_RE.match(cmd_ext):
+        cmd_ext = raw_ext
+
+    cmd = _extension_detail_command(cmd_ext, typ)
+    if cmd is None and not typ and row is not None:
+        rt = cache_type.lower()
+        if rt != "udp-ext" and "udp" not in rt:
+            cmd = f"display station {cmd_ext}"
+
+    if cmd is None:
+        return _payload(
+            ok=True,
+            extension=cmd_ext,
+            type=typ or cache_type,
+            command=None,
+            formRows=[],
+            port=_opt_cache_field(row, "port"),
+            name=_opt_cache_field(row, "name"),
+            setType=None,
+            error=None,
+            cacheOnly=True,
+            note="cache-only (no CM form for this type)",
+        )
+
+    with _lock:
+        if not _connected or _session is None:
+            return _payload(
+                ok=False,
+                extension=cmd_ext,
+                type=typ or cache_type,
+                command=cmd,
+                error="Not connected",
+            )
+        sess = _session
+
+    def _run_ro(command: str) -> tuple[str, str | None]:
+        st = sess.run(
+            command,
+            max_more_pages=80,
+            retry_on_error=False,
+            more_idle=3.0,
+        )
+        raw = st.text or ""
+        e: str | None = None
+        if not getattr(st, "ok", True):
+            e = getattr(st, "error", None)
+        if "\nd" not in raw.replace("\r", "") and not (e or "").strip():
+            time.sleep(0.35)
+            st = sess.run(
+                command,
+                max_more_pages=80,
+                retry_on_error=False,
+                more_idle=3.0,
+            )
+            raw = st.text or ""
+            if not getattr(st, "ok", True):
+                e = getattr(st, "error", None)
+        return raw, e
+
+    text = ""
+    err: str | None = None
+    status_text = ""
+    status_err: str | None = None
+    with _ossi_lock:
+        try:
+            text, err = _run_ro(cmd)
+        except Exception as exc:
+            err = str(exc)
+        try:
+            kind = "station"
+            cl = cmd.lower()
+            if cl.startswith("display vdn"):
+                kind = "vdn"
+            elif cl.startswith("display hunt"):
+                kind = "hunt"
+            p = PATHS.data_dir / f"display_{kind}_{cmd_ext}_last.txt"
+            PATHS.data_dir.mkdir(parents=True, exist_ok=True)
+            p.write_text((text or "")[:80000], encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+        if cmd.lower().startswith("display station"):
+            try:
+                status_text, status_err = _run_ro(f"status station {cmd_ext}")
+            except Exception as exc:
+                status_err = str(exc)
+            try:
+                sp = PATHS.data_dir / f"status_station_{cmd_ext}_last.txt"
+                PATHS.data_dir.mkdir(parents=True, exist_ok=True)
+                sp.write_text((status_text or "")[:80000], encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+        time.sleep(0.15)
+
+    if cmd.lower().startswith("display vdn"):
+        parsed = parse_display_vdn(text, cmd_ext)
+    elif cmd.lower().startswith("display hunt"):
+        parsed = parse_display_hunt(text, cmd_ext)
+    else:
+        parsed = parse_display_station(text, cmd_ext)
+
+    form_rows = list(parsed.get("formRows") or [])
+    cmd_out = cmd
+    if cmd.lower().startswith("display station"):
+        st_parsed = parse_status_station(status_text, cmd_ext)
+        form_rows.extend(st_parsed.get("formRows") or [])
+        cmd_out = f"{cmd} + status station {cmd_ext}"
+        if st_parsed.get("error") and not err:
+            err = st_parsed.get("error")
+        if status_err and not err:
+            err = status_err
+
+    parse_err = parsed.get("error")
+    combined = parse_err or err
+    useful = bool(form_rows or parsed.get("port") or parsed.get("name") or parsed.get("setType"))
+    ok = useful if combined else True
+    if combined and not useful:
+        ok = False
+
+    return _payload(
+        ok=ok,
+        extension=cmd_ext,
+        type=typ or cache_type,
+        command=cmd_out,
+        formRows=form_rows,
+        port=parsed.get("port"),
+        name=parsed.get("name"),
+        setType=parsed.get("setType"),
+        buttons=parsed.get("buttons") or [],
+        error=combined,
+        cacheOnly=False,
+    )
 
 
 def alarms_public() -> dict[str, Any]:
@@ -2185,6 +2541,29 @@ class Handler(BaseHTTPRequestHandler):
                 touch_ui()
                 try:
                     payload = refresh_extensions()
+                    self._send(200, payload)
+                except Exception as ext_exc:
+                    self._send(
+                        401 if "Not connected" in str(ext_exc) else 500,
+                        {"ok": False, "error": str(ext_exc)},
+                    )
+                return
+            if path in ("/extensions/detail", "/extension/detail"):
+                touch_ui()
+                ext = str(
+                    body.get("extension")
+                    or body.get("Extension")
+                    or body.get("ext")
+                    or ""
+                ).strip()
+                raw_type = body.get("type")
+                if raw_type is None:
+                    raw_type = body.get("Type")
+                type_hint = str(raw_type).strip() if raw_type is not None else ""
+                try:
+                    payload = refresh_extension_detail(
+                        ext, type_hint=type_hint or None
+                    )
                     self._send(200, payload)
                 except Exception as exc:
                     self._send(

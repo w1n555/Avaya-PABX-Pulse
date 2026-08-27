@@ -1,6 +1,6 @@
-# Avaya PABX Network Monitoring for NOC
+# Avaya PABX Pulse
 
-Read-only **Avaya Communication Manager (CM 10.x)** dashboard for the Network Operations Centre.
+**Feel the pulse of PABX.** Read-only **Avaya Communication Manager (CM 10.x)** dashboard for the Network Operations Centre.
 
 The UI runs in a browser (IIS). It talks to CM with **OSSI over SSH :5022** (not SAT scraping). Call records are collected separately on **TCP :9000**.
 

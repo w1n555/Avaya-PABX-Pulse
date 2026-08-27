@@ -376,7 +376,9 @@ class OssiSession:
                 if last_more_at > 0:
                     idle = 1.05 if more_idle is None else max(1.05, float(more_idle))
                 else:
-                    idle = 0.6
+                    # display station/vdn: no more? until first f-lines; 0.6s
+                    # aborts after the c/t echo (20101 dump was 31 bytes).
+                    idle = 0.6 if more_idle is None else max(0.6, float(more_idle))
                 if (time.monotonic() - last) >= idle:
                     break
             else:

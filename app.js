@@ -30,6 +30,7 @@ import {
   setOssiBusy as setGatewayOssiBusy,
   runGatewayConfigRefresh,
   getOpenGatewayDetailMg,
+  openGatewayDetail,
 } from "./gateway-ui.js?v=20260825i";
 import {
   initExtensionUi,
@@ -40,7 +41,8 @@ import {
   armExtensionNext,
   EXTENSION_INTERVAL_MS,
   setOssiBusy as setExtensionOssiBusy,
-} from "./extension-ui.js?v=20260825i";
+  runExtensionDetailRefresh,
+} from "./extension-ui.js?v=20260826j";
 import {
   initMapUi,
   onMapTabShow,
@@ -154,7 +156,13 @@ async function pumpQueue() {
         await runQueuedJob(job);
       } catch (e) {
         console.warn("queue job failed:", job?.kind, e?.message || e);
-        if (job?.kind === "add" || job?.kind === "status" || job?.kind === "gw-config") {
+        if (
+          job?.kind === "add" ||
+          job?.kind === "status" ||
+          job?.kind === "gw-config" ||
+          job?.kind === "ext-detail" ||
+          job?.kind === "remove"
+        ) {
           finishProgress(false, String(e.message || e));
           const btn = $("btn-progress-close");
           if (btn) btn.hidden = false;
@@ -203,36 +211,64 @@ async function runQueuedJob(job) {
     finishProgress(true, `TG ${job.tg} added`);
     return;
   }
+  if (job.kind === "remove") {
+    setProgress(40, `Removing TG ${job.tg}…`);
+    const res = await api("monitored/remove", {
+      method: "POST",
+      body: JSON.stringify({ tg: job.tg }),
+    });
+    applyMonitoredResponse(res);
+    state.trunkItems = state.trunkItems.filter((x) => Number(x.tg) !== Number(job.tg));
+    if (state.detailTg === job.tg) closeDetail();
+    renderTrunkTable();
+    setProgress(100, "Removed");
+    finishProgress(true, `TG ${job.tg} removed`);
+    return;
+  }
   if (job.kind === "status") {
+    if (job.showModal) {
+      showProgress(`TG ${job.tg}`, `status trunk ${job.tg}…`);
+      setProgress(40, `status trunk ${job.tg}…`);
+    }
     const one = await api("refresh/one", {
       method: "POST",
       body: JSON.stringify({ tg: job.tg }),
     });
     if (one.item) applyOneTrunkItem(one.item);
+    if (state.detailTg != null && Number(state.detailTg) === Number(job.tg) && one.item) {
+      paintDetailFromItem(one.item);
+    }
+    if (job.showModal) {
+      setProgress(100, "Done");
+      finishProgress(true, one.item && one.item.error ? `TG ${job.tg} UPDATE FAILED` : `TG ${job.tg} updated`);
+    }
     return;
   }
   if (job.kind === "extensions") {
-    // Low priority inventory — only runs when 60s pack is idle (pumpQueue waits on refreshing)
+    // Low priority inventory — only runs when 90s pack is idle (pumpQueue waits on refreshing)
     state.refreshing = true;
     state.refreshingSince = Date.now();
+    state.packPhase = "extensions";
     try {
       setOssiBusy(true);
     } catch {
       /* ignore */
     }
     try {
-      setStatus("OSSI list extension…");
+      setStatus("OSSI list extension + uniform-dialplan…");
       await runExtensionRefresh({ showModal: !!job.showModal });
       armExtensionNext(EXTENSION_INTERVAL_MS);
       setStatus("");
     } finally {
       state.refreshing = false;
       state.refreshingSince = 0;
+      if (state.packPhase === "extensions") state.packPhase = "";
       try {
         paintOssiBusyFromPack();
       } catch {
         /* ignore */
       }
+      healAutoCountdown();
     }
     return;
   }
@@ -258,10 +294,38 @@ async function runQueuedJob(job) {
       }
       healAutoCountdown();
     }
+    return;
+  }
+  if (job.kind === "ext-detail") {
+    state.refreshing = true;
+    state.refreshingSince = Date.now();
+    try {
+      setOssiBusy(true);
+    } catch {
+      /* ignore */
+    }
+    state.packPhase = "ext-detail";
+    const cmd = extDetailCommand(job.type);
+    try {
+      setStatus(`OSSI ${cmd} ${job.ext}…`);
+      await runExtensionDetailRefresh(job.ext, { showModal: !!job.showModal, type: job.type });
+      setStatus("");
+    } finally {
+      state.refreshing = false;
+      state.refreshingSince = 0;
+      if (state.packPhase === "ext-detail") state.packPhase = "";
+      try {
+        paintOssiBusyFromPack();
+      } catch {
+        /* ignore */
+      }
+      healAutoCountdown();
+    }
+    return;
   }
 }
 
-/** Enqueue list extension (login / 1h / manual). Coalesce duplicate jobs. */
+/** Enqueue list extension + uniform-dialplan (login / 1h / manual). Coalesce duplicate jobs. */
 function enqueueExtensionRefresh(opts = {}) {
   const showModal = !!opts.showModal;
   const has = cmdQueue.some((j) => j.kind === "extensions");
@@ -270,7 +334,7 @@ function enqueueExtensionRefresh(opts = {}) {
     if (showModal) {
       const job = cmdQueue.find((j) => j.kind === "extensions");
       if (job) job.showModal = true;
-      setStatus(`Queued list extension (${cmdQueue.length} command(s)) — waiting for OSSI…`);
+      setStatus(`Queued list extension + uniform-dialplan (${cmdQueue.length} command(s)) — waiting for OSSI…`);
     }
     pumpQueue();
     return;
@@ -299,7 +363,45 @@ function enqueueGwConfig(mg, opts = {}) {
   healAutoCountdown();
 }
 
-/** Hourly list extension while session is live (not every 60s). */
+function extDetailCommand(type) {
+  const t = String(type || "").trim().toLowerCase();
+  if (t === "vdn" || t === "vdn-extension" || t.startsWith("vdn")) return "display vdn";
+  if (t === "hunt-group" || t === "hunt" || t.startsWith("hunt")) return "display hunt-group";
+  return "display station";
+}
+
+/** Enqueue one display station|vdn|hunt-group (click-in). Coalesce to latest ext. Yields to 90s pack. */
+function enqueueExtDetail(ext, opts = {}) {
+  const extStr = String(ext || "").trim();
+  if (!extStr) return;
+  const type = opts.type || "";
+  const cmd = extDetailCommand(type);
+  const showModal = opts.showModal !== false;
+  if (showModal) {
+    showProgress(`Extension ${extStr}`, `${cmd}…`);
+    setProgress(
+      state.refreshing ? 12 : 20,
+      state.refreshing
+        ? `Queued ${cmd} … waiting for OSSI`
+        : `${cmd} ${extStr}…`
+    );
+  }
+  for (let i = cmdQueue.length - 1; i >= 0; i -= 1) {
+    if (cmdQueue[i].kind === "ext-detail") cmdQueue.splice(i, 1);
+  }
+  enqueueJob({ kind: "ext-detail", ext: extStr, type, showModal });
+  healAutoCountdown();
+}
+
+function openGatewayTab(mg) {
+  const n = Number(mg);
+  if (!n) return;
+  const tab = document.querySelector('.tab[data-tab="gateway"]');
+  if (tab) tab.click();
+  openGatewayDetail(n, { showModal: true });
+}
+
+/** Hourly list extension + uniform-dialplan while session is live (not every 60s). */
 function startExtensionHourlyTimer() {
   stopExtensionHourlyTimer();
   armExtensionNext(EXTENSION_INTERVAL_MS);
@@ -328,7 +430,7 @@ const state = {
   _hbFails: 0,
   _hbGone: 0,
   countdownTimer: null,
-  /** Hourly list extension (not 60s pack) */
+  /** Hourly list extension + uniform-dialplan (not 60s pack) */
   extensionTimer: null,
   /** Fast poll of trunk_data while progressive OSSI status runs */
   livePollTimer: null,
@@ -520,8 +622,7 @@ function applyUiMode() {
     const card = $("trunk-card");
     if (card) card.classList.remove("dimmed");
     if (btnDisc) btnDisc.disabled = false;
-    // Login stays clickable so a dead OSSI session can be re-authed
-    if (btnConn) btnConn.disabled = !!state.connecting;
+    if (btnConn) btnConn.disabled = true;
     fields.forEach((id) => {
       const el = $(id);
       if (el) el.disabled = true;
@@ -545,7 +646,7 @@ function applyUiMode() {
     if ($("connect-hint")) {
       $("connect-hint").hidden = false;
       $("connect-hint").textContent =
-        "Login is manual (Host / Password). F5 keeps the session; closing the tab logs off OSSI after about 5 minutes.";
+        "Login with Host / Password. F5 keeps the session; closing the tab logs off OSSI after about 5 minutes.";
     }
   }
 }
@@ -1085,8 +1186,12 @@ function applyServerSchedule(src) {
 function paintAutoStatusFromSchedule(src) {
   if (src && typeof src === "object") {
     const phase = String(src.packPhase || "").toLowerCase();
-    if (phase) state.packPhase = phase;
-    if (src.refreshing) state._wasPackBusy = true;
+    if (src.refreshing) {
+      state._wasPackBusy = true;
+      if (phase) state.packPhase = phase;
+    } else if (!state.refreshing) {
+      state.packPhase = phase;
+    }
   }
   paintAutoStatusChip();
 }
@@ -1101,15 +1206,23 @@ function autoStatusMessage() {
       )
     : null;
   const due = sec === 0 && !!state.nextRefreshAt;
-  if (busy || due) {
-    const phase = String(state.packPhase || "trunks").toLowerCase();
-    const msgs = {
-      trunks: "Updating trunks… (live, per TG)",
-      alarms: "Updating alarms…",
-      gateways: "Updating gateways…",
-      config: "Updating gateway configuration…",
-    };
-    return msgs[phase] || "Updating trunks… (live, per TG)";
+  const phase = String(state.packPhase || "").toLowerCase();
+  const msgs = {
+    trunks: "Updating trunks… (live, per TG)",
+    alarms: "Updating alarms…",
+    gateways: "Updating gateways…",
+    config: "Updating gateway configuration…",
+    extensions: "Updating extensions…",
+    "ext-detail": "Updating extension detail…",
+  };
+  if (busy) {
+    if (msgs[phase]) return msgs[phase];
+    if (state.refreshing && !state.backendRefreshing) return "Updating…";
+    return msgs.trunks;
+  }
+  // Countdown hit 0 but pack has not started — do not keep "Updating trunks"
+  if (due && state.backendRefreshing) {
+    return msgs[phase] || msgs.trunks;
   }
   if (sec != null) {
     if (state._wasPackBusy) {
@@ -1619,16 +1732,15 @@ async function openDetail(tg) {
 async function loadDetail(tg, opts = {}) {
   const force = !!opts.force;
   if (force) {
-    // One status trunk via refresh/one — updates list + channels cache
-    const res = await api("refresh/one", {
-      method: "POST",
-      body: JSON.stringify({ tg }),
-    });
-    const item = res.item || res.Item;
-    if (item) {
-      applyOneTrunkItem(item);
-      paintDetailFromItem(item);
-      return item;
+    if (state.refreshing) {
+      showProgress(`TG ${tg}`, "Queued status trunk — waiting for OSSI…");
+      setProgress(12, `Waiting for OSSI… then status trunk ${tg}`);
+    }
+    enqueueJob({ kind: "status", tg: Number(tg), showModal: true });
+    const localBusy = (state.trunkItems || []).find((x) => Number(x.tg) === Number(tg));
+    if (localBusy) {
+      paintDetailFromItem(localBusy);
+      return localBusy;
     }
   }
 
@@ -1680,6 +1792,7 @@ function closeDetail() {
 async function runLoginOssiCache() {
   state.refreshing = true;
   state.refreshingSince = Date.now();
+  state.packPhase = "trunks";
   try {
     setOssiBusy(true);
   } catch {
@@ -1748,6 +1861,7 @@ async function runLoginOssiCache() {
       /* cache paint optional */
     }
 
+    state.packPhase = "alarms";
     setLoginOssi("display alarms", 80);
     try {
       await api("refresh/one", {
@@ -1759,6 +1873,7 @@ async function runLoginOssiCache() {
       setLoginOssi(`display alarms (failed — will retry on Auto ${REFRESH_INTERVAL_SEC}s)`, 80);
     }
 
+    state.packPhase = "gateways";
     setLoginOssi("list media-gateway", 92);
     try {
       await api("refresh/one", {
@@ -1769,10 +1884,27 @@ async function runLoginOssiCache() {
       console.warn("login list media-gateway:", e?.message || e);
       setLoginOssi(`list media-gateway (failed — will retry on Auto ${REFRESH_INTERVAL_SEC}s)`, 92);
     }
+
+    state.packPhase = "extensions";
+    setLoginOssi("list extension + list station + list uniform-dialplan", 94);
+    try {
+      setExtensionSessionConnected(true);
+    } catch {
+      /* ignore */
+    }
+    try {
+      await runExtensionRefresh({ showModal: false });
+      armExtensionNext(EXTENSION_INTERVAL_MS);
+    } catch (e) {
+      console.warn("login list extension:", e?.message || e);
+      setLoginOssi("list extension (failed — queued)", 94);
+      enqueueExtensionRefresh({ showModal: false, reason: "login-retry" });
+    }
     pumpQueue();
   } finally {
     state.refreshing = false;
     state.refreshingSince = 0;
+    state.packPhase = "";
     try {
       paintOssiBusyFromPack();
     } catch {
@@ -1887,13 +2019,14 @@ async function connect() {
     setGatewaySessionConnected(true);
     setExtensionSessionConnected(true);
     setMapSessionConnected(true);
-    setLoginStep(3, "done", "Cached status trunk · display alarms · list media-gateway");
-    setLoginOssi("Cached · list extension queued (hourly)", 100);
+    setLoginStep(3, "done", "Cached status trunk · alarms · gateways · extensions");
+    setLoginOssi("Cached · all tabs ready", 100);
     setError("");
-    setStatus("Logged in. Trunk / Alarm / Gateway ready · list extension queued.");
+    setStatus("Logged in. Trunk / Alarm / Gateway / Extension ready.");
+    state.packPhase = "";
+    state.backendRefreshing = false;
     onSessionLive();
-    // list extension after login pack — enqueue (does not block 100%)
-    enqueueExtensionRefresh({ showModal: false, reason: "login" });
+    armNextRefresh(REFRESH_INTERVAL_SEC);
     startExtensionHourlyTimer();
     hideLoginModal(700);
     refreshCmTime({ soft: true, force: false }).catch(() => {});
@@ -2280,37 +2413,25 @@ async function addTg() {
   enqueueJob({ kind: "add", tg, note });
 }
 
+function enqueueRemoveTg(tg) {
+  const n = Number(tg);
+  if (!n) return;
+  if (cmdQueue.some((j) => j.kind === "remove" && Number(j.tg) === n)) {
+    pumpQueue();
+    return;
+  }
+  if (state.refreshing) {
+    showProgress("Remove trunk", `Queued TG ${n} — waiting for OSSI…`);
+    setProgress(12, `Waiting for OSSI… then remove TG ${n}`);
+  } else {
+    showProgress("Remove trunk", `Removing TG ${n}…`);
+    setProgress(20, `Removing TG ${n}…`);
+  }
+  enqueueJob({ kind: "remove", tg: n });
+}
+
 async function removeTg(tg) {
-  const btn = document.querySelector(`.btn-rm[data-rm="${tg}"]`);
-  if (btn) {
-    btn.classList.add("is-loading");
-    btn.disabled = true;
-    btn.textContent = "…";
-  }
-  showProgress("Remove trunk", `Removing TG ${tg}…`);
-  setProgress(30, "Updating list…");
-  try {
-    const res = await api("monitored/remove", {
-      method: "POST",
-      body: JSON.stringify({ tg }),
-    });
-    applyMonitoredResponse(res);
-    // Immediate UI remove (do not wait for full trunk-data reload)
-    state.trunkItems = state.trunkItems.filter((x) => Number(x.tg) !== Number(tg));
-    if (state.detailTg === tg) closeDetail();
-    renderTrunkTable();
-    setProgress(100, "Removed");
-    finishProgress(true, `TG ${tg} removed`);
-  } catch (e) {
-    finishProgress(false, String(e.message || e));
-    const b = $("btn-progress-close");
-    if (b) b.hidden = false;
-    if (btn) {
-      btn.classList.remove("is-loading");
-      btn.disabled = false;
-      btn.textContent = "Remove";
-    }
-  }
+  enqueueRemoveTg(tg);
 }
 
 function clearAuto() {
@@ -2499,6 +2620,8 @@ async function init() {
   // Manual Refresh on Extension tab → enqueue (yields to 60s pack)
   window.__cmEnqueueExtension = (opts) => enqueueExtensionRefresh(opts || {});
   window.__cmEnqueueGwConfig = (mg, opts) => enqueueGwConfig(mg, opts || {});
+  window.__cmEnqueueExtDetail = (ext, opts) => enqueueExtDetail(ext, opts || {});
+  window.__cmOpenGatewayTab = (mg) => openGatewayTab(mg);
 
   const modalClose = $("btn-login-modal-close");
   if (modalClose) {
@@ -2603,7 +2726,7 @@ async function init() {
     try {
       const h = await api("health");
       if (h && h.bridgeHealthy) {
-        setStatus("Login required (Host / Password). Auto-login is off.");
+        setStatus("");
       } else {
         setStatus("API is up. Click Login to start the OSSI bridge and connect to CM.");
       }

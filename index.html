@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Avaya PABX Network Monitoring for NOC</title>
-  <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="style.css?v=20260825k" />
+  <title>Avaya PABX Pulse</title>
+  <link rel="icon" href="favicon.png" type="image/png" />
+  <link rel="stylesheet" href="style.css?v=20260826j" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
   <script>
     // Apply theme before paint (avoid flash)
@@ -19,7 +19,11 @@
   <div class="app">
     <header class="topbar">
       <div class="brand">
-        <div class="brand-title">Avaya PABX Network Monitoring</div>
+        <img class="brand-logo" src="logo.png" alt="CLP" />
+        <div class="brand-text">
+          <div class="brand-title">Avaya PABX Pulse</div>
+          <div class="brand-sub">Feel the pulse of PABX</div>
+        </div>
       </div>
       <div class="top-meta">
         <button type="button" class="btn-theme" id="btn-theme" title="Switch light / dark theme" aria-label="Theme">☀</button>
@@ -39,7 +43,7 @@
         <button type="button" class="btn btn-primary" id="btn-connect">Login</button>
         <button type="button" class="btn" id="btn-disconnect" disabled>Logout</button>
       </div>
-      <p class="hint connect-hint" id="connect-hint">Enter Host / Password → click <strong>Login</strong>. The system starts the OSSI bridge, connects to CM, and begins monitoring.</p>
+      <p class="hint connect-hint" id="connect-hint">Login with Host / Password. F5 keeps the session; closing the tab logs off OSSI after about 5 minutes.</p>
       <div class="status-line" id="status-line" hidden></div>
       <div class="error-line" id="error-line" hidden></div>
     </section>
@@ -308,10 +312,11 @@
             </div>
           </div>
         </div>
+        <div id="ext-list-view">
         <div class="map-stat-row ext-stat-row" id="ext-summary-kpi" aria-label="Extension summary"></div>
         <div class="alarm-type-filters" id="ext-search-filters">
           <span class="hint" style="margin:0">Search:</span>
-          <input type="search" id="ext-search" class="gw-search" placeholder="extension / name / port / type / gateway" autocomplete="off" />
+          <input type="search" id="ext-search" class="gw-search" placeholder="extension / name / port / type / gateway / insert" autocomplete="off" />
         </div>
         <div class="alarm-type-filters" id="ext-type-filters">
           <span class="hint" style="margin:0">Type:</span>
@@ -323,15 +328,69 @@
               <tr>
                 <th>Extension</th>
                 <th>Type</th>
+                <th>Insert Digits</th>
                 <th>Port</th>
                 <th>Gateway</th>
                 <th>Name</th>
               </tr>
             </thead>
             <tbody id="ext-tbody">
-              <tr class="empty"><td colspan="5">Login queues list extension — open this tab to view cache.</td></tr>
+              <tr class="empty"><td colspan="6">Login queues list extension + uniform-dialplan — open this tab to view cache.</td></tr>
             </tbody>
           </table>
+        </div>
+        </div>
+        <div id="ext-detail-view" class="detail-view" hidden>
+          <div class="gw-ident">
+            <button type="button" class="btn" id="btn-ext-detail-back">← Back</button>
+            <div class="gw-ident-text">
+              <h3 id="ext-detail-title">—</h3>
+              <p class="hint" id="ext-detail-meta"></p>
+            </div>
+          </div>
+          <div class="map-stat-row" id="ext-detail-kpi" aria-label="Extension identity">
+            <div class="map-stat">
+              <div class="map-stat-k">Type</div>
+              <div class="map-stat-v" id="ext-dstat-type">—</div>
+            </div>
+            <div class="map-stat">
+              <div class="map-stat-k">Port</div>
+              <div class="map-stat-v" id="ext-dstat-port">—</div>
+            </div>
+            <div class="map-stat">
+              <div class="map-stat-k">Gateway</div>
+              <div class="map-stat-v" id="ext-dstat-gw">—</div>
+            </div>
+            <div class="map-stat">
+              <div class="map-stat-k">Last Update</div>
+              <div class="map-stat-v map-stat-v-ts" id="ext-dstat-updated">—</div>
+            </div>
+          </div>
+          <h3 class="gw-detail-h">Identity</h3>
+          <div class="table-wrap gw-detail-table-wrap">
+            <table class="data-table gw-detail-table" id="ext-ident-table">
+              <tbody id="ext-ident-tbody"></tbody>
+            </table>
+          </div>
+          <div class="ext-form-split">
+            <div class="ext-form-col">
+              <h3 class="gw-detail-h">CM form</h3>
+              <p class="hint" id="ext-form-status"></p>
+              <div class="table-wrap gw-detail-table-wrap">
+                <table class="data-table gw-detail-table" id="ext-form-table">
+                  <tbody id="ext-form-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="ext-form-col" id="ext-btn-wrap" hidden>
+              <h3 class="gw-detail-h">Button Assignment</h3>
+              <div class="table-wrap gw-detail-table-wrap">
+                <table class="data-table gw-detail-table" id="ext-btn-table">
+                  <tbody id="ext-btn-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </main>
@@ -684,6 +743,6 @@
       }
     })();
   </script>
-  <script src="app.js?v=20260825k" type="module"></script>
+  <script src="app.js?v=20260826j" type="module"></script>
 </body>
 </html>

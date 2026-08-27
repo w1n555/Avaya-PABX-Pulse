@@ -1,4 +1,4 @@
-# Avaya PABX Network Monitoring for NOC
+# Avaya PABX Pulse
 
 Read-only **Avaya Communication Manager (CM 10.x)** dashboard for the Network Operations Centre.
 
