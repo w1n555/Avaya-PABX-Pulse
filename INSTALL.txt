@@ -59,7 +59,7 @@ Always the same:
 Script detects:
   - git clone?  -> auto git pull from GitHub
   - existing api/venv/data?  -> full upgrade path
-  - keeps data\monitored_trunks.json
+  - keeps data_live\monitored_trunks.json
   - republish api, rewire IIS, restart bridge
 
 No need for -Update flag.

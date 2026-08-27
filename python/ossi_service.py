@@ -89,7 +89,7 @@ from extension_parse import (  # noqa: E402
 
 
 class _Paths:
-    data_dir: Path = _SITE_ROOT / "data"
+    data_dir: Path = _SITE_ROOT / "data_live"
 
     @property
     def monitored(self) -> Path:
@@ -2719,7 +2719,7 @@ def _health_already_up(host: str, port: int) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(description="OSSI bridge for CM NOC")
     parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=18765)
+    parser.add_argument("--port", type=int, default=18776)
     parser.add_argument("--data-dir", default=str(PATHS.data_dir))
     args = parser.parse_args()
 

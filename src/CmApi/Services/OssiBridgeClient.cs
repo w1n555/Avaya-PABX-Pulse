@@ -40,7 +40,7 @@ public sealed class OssiBridgeClient
         siteRoot = siteRoot.Trim();
 
         _dataDir = string.IsNullOrWhiteSpace(config["OssiBridge:DataDir"])
-            ? Path.Combine(siteRoot, "data")
+            ? Path.Combine(siteRoot, "data_live")
             : config["OssiBridge:DataDir"]!.Trim();
         _pythonDir = Path.Combine(siteRoot, "python");
 
@@ -269,7 +269,7 @@ public sealed class OssiBridgeClient
                 // bat args: port  dataSubdir(relative to site) — we pass absolute data via env override not supported;
                 // map data_live vs data from _dataDir name
                 var dataLeaf = Path.GetFileName(_dataDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-                if (string.IsNullOrEmpty(dataLeaf)) dataLeaf = "data";
+                if (string.IsNullOrEmpty(dataLeaf)) dataLeaf = "data_live";
                 var psiBat = new ProcessStartInfo
                 {
                     FileName = bat,

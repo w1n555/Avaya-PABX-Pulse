@@ -35,12 +35,12 @@ builder.WebHost.UseIISIntegration();
 var app = builder.Build();
 app.UseCors();
 
-// Resolve data dir relative to published api/ → site root data/
+// Resolve data dir relative to published api/ → site root data_live/
 var siteRoot = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, ".."));
 var cfgRoot = app.Configuration["OssiBridge:SiteRoot"];
 if (!string.IsNullOrWhiteSpace(cfgRoot)) siteRoot = cfgRoot.Trim();
-var dataDir = Path.Combine(siteRoot, "data");
 var dataLiveDir = Path.Combine(siteRoot, "data_live");
+var dataDir = dataLiveDir;
 Directory.CreateDirectory(dataDir);
 var cdrFiles = new CmApi.Services.CdrFileService(siteRoot);
 var cdrLogger = app.Services.GetRequiredService<CdrLoggerHost>();

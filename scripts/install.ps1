@@ -19,7 +19,7 @@
 
   If folder is a git clone -> auto git pull + republish + restart services.
   If already configured -> safe re-run (idempotent upgrade).
-  data\monitored_trunks.json is kept.
+  data_live\monitored_trunks.json is kept.
 
 .EXAMPLE
   cd C:\inetpub\wwwroot\CM\scripts
@@ -48,6 +48,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# Single OSSI bridge — MUST match live api\appsettings.json
+$script:OssiBridgePort = 18776
+$script:OssiBridgeLegacyPort = 18765  # kill leftover only; never start
+$script:OssiDataLeaf = "data_live"
 
 function Write-Info([string]$m) { Write-Host "[*] $m" -ForegroundColor Cyan }
 function Write-Ok([string]$m)   { Write-Host "[OK] $m" -ForegroundColor Green }
@@ -373,11 +378,17 @@ function Set-JsonAppSettings([string]$root, [string]$pythonExe) {
         }
         AllowedHosts = "*"
         OssiBridge = @{
-            BaseUrl  = "http://127.0.0.1:18765"
+            BaseUrl  = "http://127.0.0.1:$($script:OssiBridgePort)"
+            Bind     = "0.0.0.0"
             SiteRoot = $root
-            DataDir  = (Join-Path $root "data")
+            DataDir  = (Join-Path $root $script:OssiDataLeaf)
             OssiSrc  = (Join-Path $root "vendor\avaya-ossi\src")
             Python   = $pythonExe
+        }
+        CdrLogger = @{
+            Enabled = $true
+            Port    = 9000
+            Bind    = "0.0.0.0"
         }
     } | ConvertTo-Json -Depth 6
 
@@ -391,7 +402,7 @@ function Set-JsonAppSettings([string]$root, [string]$pythonExe) {
 }
 
 function Ensure-DataFiles([string]$root) {
-    $data = Join-Path $root "data"
+    $data = Join-Path $root $script:OssiDataLeaf
     New-Item -ItemType Directory -Force -Path $data | Out-Null
     $mon = Join-Path $data "monitored_trunks.json"
     $td  = Join-Path $data "trunk_data.json"
@@ -696,7 +707,7 @@ function Set-IisSite([string]$root, [int]$port) {
 
 function Set-Acls([string]$root) {
     Write-Info "Setting folder permissions for IIS..."
-    foreach ($rel in @("", "data", "python", "api")) {
+    foreach ($rel in @("", "data", $script:OssiDataLeaf, "python", "api")) {
         $p = if ($rel) { Join-Path $root $rel } else { $root }
         if (-not (Test-Path $p)) { continue }
         & icacls $p /grant "IIS_IUSRS:(OI)(CI)M" /T /C /Q 2>$null | Out-Null
@@ -708,9 +719,9 @@ function Set-Acls([string]$root) {
 function Install-BridgeTask([string]$root, [string]$venvPy) {
     $TaskName = "CM-NOC-OSSI-Bridge"
     $script = Join-Path $root "python\ossi_service.py"
-    $data = Join-Path $root "data"
+    $data = Join-Path $root $script:OssiDataLeaf
     $work = Join-Path $root "python"
-    $arg = "`"$script`" --host 0.0.0.0 --port 18765 --data-dir `"$data`""
+    $arg = "`"$script`" --host 0.0.0.0 --port $($script:OssiBridgePort) --data-dir `"$data`""
 
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
     $action = New-ScheduledTaskAction -Execute $venvPy -Argument $arg -WorkingDirectory $work
@@ -728,26 +739,28 @@ function Install-BridgeTask([string]$root, [string]$venvPy) {
     Write-Ok "Scheduled task $TaskName (auto-start bridge at logon)"
 }
 
-function Test-BridgeHealth([int]$port = 18765) {
+function Test-BridgeHealth([int]$port = 0) {
+    if ($port -le 0) { $port = $script:OssiBridgePort }
     try {
         $r = Invoke-WebRequest "http://127.0.0.1:$port/health" -UseBasicParsing -TimeoutSec 2
-        return ($r.StatusCode -eq 200)
+        return ($r.StatusCode -eq 200 -and "$($r.Content)" -match 'ossi-bridge')
     } catch {
         return $false
     }
 }
 
-function Stop-BridgeOnPort([int]$port = 18765) {
+function Stop-BridgeOnPort([int]$port = 0) {
+    if ($port -le 0) { $port = $script:OssiBridgePort }
     $prev = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
-        # Only stop listeners we can identify; never throw
+        # $PID is a PowerShell automatic variable (read-only). Never assign it.
         if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
             Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
                 ForEach-Object {
-                    $pid = $_.OwningProcess
-                    if ($pid -and $pid -gt 4) {
-                        Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+                    $procId = $_.OwningProcess
+                    if ($procId -and $procId -gt 4) {
+                        Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
                     }
                 }
         }
@@ -760,7 +773,8 @@ function Start-BridgeNow([string]$root, [string]$venvPy, [switch]$ForceRestart) 
     try {
         if ($ForceRestart) {
             Write-Info "Restarting OSSI bridge..."
-            Stop-BridgeOnPort 18765
+            Stop-BridgeOnPort $script:OssiBridgeLegacyPort
+            Stop-BridgeOnPort $script:OssiBridgePort
             Start-Sleep -Seconds 1
         } elseif (Test-BridgeHealth) {
             Write-Ok "OSSI bridge already running"
@@ -768,7 +782,7 @@ function Start-BridgeNow([string]$root, [string]$venvPy, [switch]$ForceRestart) 
         }
 
         $script = Join-Path $root "python\ossi_service.py"
-        $data = Join-Path $root "data"
+        $data = Join-Path $root $script:OssiDataLeaf
         $work = Join-Path $root "python"
         New-Item -ItemType Directory -Force -Path $data | Out-Null
 
@@ -791,14 +805,14 @@ function Start-BridgeNow([string]$root, [string]$venvPy, [switch]$ForceRestart) 
         }
 
         Write-Info "Starting bridge: $py"
-        $arg = "`"$script`" --host 0.0.0.0 --port 18765 --data-dir `"$data`""
+        $arg = "`"$script`" --host 0.0.0.0 --port $($script:OssiBridgePort) --data-dir `"$data`""
         # Use cmd start so short-lived wrappers / venv stubs work on more machines
         $cmd = "start `"`" /B `"$py`" $arg"
         $p = Start-Process -FilePath "$env:ComSpec" -ArgumentList @("/c", $cmd) -WorkingDirectory $work -WindowStyle Hidden -PassThru -ErrorAction SilentlyContinue
         if (-not $p) {
             # Fallback: direct Start-Process
             Start-Process -FilePath $py -ArgumentList @(
-                $script, "--host", "0.0.0.0", "--port", "18765", "--data-dir", $data
+                $script, "--host", "0.0.0.0", "--port", "$($script:OssiBridgePort)", "--data-dir", $data
             ) -WorkingDirectory $work -WindowStyle Hidden -ErrorAction SilentlyContinue | Out-Null
         }
 
@@ -813,7 +827,7 @@ function Start-BridgeNow([string]$root, [string]$venvPy, [switch]$ForceRestart) 
             if (Test-BridgeHealth) { $ok = $true; break }
         }
         if ($ok) {
-            Write-Ok "OSSI bridge is healthy on 127.0.0.1:18765"
+            Write-Ok "OSSI bridge is healthy on 127.0.0.1:$($script:OssiBridgePort)"
         } else {
             Write-Warn "Bridge not healthy yet. You can still open the web UI - Login will try auto-start."
             Write-Warn ("Manual: {0} {1} --data-dir {2}" -f $py, $script, $data)
@@ -831,6 +845,7 @@ function Test-ExistingInstall([string]$root) {
     # Heuristics: already deployed before
     if (Test-Path (Join-Path $root "api\CmApi.dll")) { return $true }
     if (Test-Path (Join-Path $root "python\.venv\Scripts\python.exe")) { return $true }
+    if (Test-Path (Join-Path $root "$($script:OssiDataLeaf)\monitored_trunks.json")) { return $true }
     if (Test-Path (Join-Path $root "data\monitored_trunks.json")) { return $true }
     if (Test-GitRepo $root) { return $true }
     return $false
@@ -881,19 +896,23 @@ function Update-CodeFromGit([string]$root) {
     }
 
     Write-Info "Git repo detected - auto-updating code from GitHub..."
-    $dataDir = Join-Path $root "data"
+    $dataDir = Join-Path $root $script:OssiDataLeaf
+    $legacyData = Join-Path $root "data"
     $backup = Join-Path $env:TEMP ("cm-noc-data-backup-" + [guid]::NewGuid().ToString("N"))
-    if (Test-Path $dataDir) {
-        New-Item -ItemType Directory -Force -Path $backup | Out-Null
-        Copy-Item (Join-Path $dataDir "*") $backup -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Info "Backed up data\ to $backup"
+    foreach ($srcDir in @($dataDir, $legacyData)) {
+        if (Test-Path $srcDir) {
+            New-Item -ItemType Directory -Force -Path $backup | Out-Null
+            Copy-Item (Join-Path $srcDir "*") $backup -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Info "Backed up $(Split-Path $srcDir -Leaf)\ to $backup"
+        }
     }
 
     Push-Location $root
     try {
         $appcmd = Get-AppCmd
         try { & $appcmd stop apppool /apppool.name:"$AppPoolName" 2>$null | Out-Null } catch {}
-        Stop-BridgeOnPort 18765
+        Stop-BridgeOnPort $script:OssiBridgeLegacyPort
+        Stop-BridgeOnPort $script:OssiBridgePort
 
         # Drop local build junk that blocks clean pull (never needed in git)
         foreach ($junk in @("api_publish_tmp", "api\CmApi.dll.new", "api\CmApi.exe.new")) {
@@ -932,7 +951,7 @@ function Update-CodeFromGit([string]$root) {
         if (Test-Path $monSrc) {
             New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
             Copy-Item $monSrc $monDst -Force
-            Write-Ok "Restored data\monitored_trunks.json"
+            Write-Ok "Restored data_live\monitored_trunks.json"
         }
     }
     return $true

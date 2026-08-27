@@ -10,9 +10,10 @@ $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (-not $Root) { $Root = (Resolve-Path (Join-Path $scriptDir "..")).Path }
 
-$DataDir = Join-Path $Root "data"
+$DataDir = Join-Path $Root "data_live"
 $Script = Join-Path $Root "python\ossi_service.py"
 $WorkDir = Join-Path $Root "python"
+if (-not (Test-Path $DataDir)) { New-Item -ItemType Directory -Force -Path $DataDir | Out-Null }
 
 $pythonCandidates = @(
     (Join-Path $Root "python\.venv\Scripts\python.exe"),

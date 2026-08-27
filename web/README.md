@@ -1,157 +1,130 @@
 # Avaya PABX Pulse
 
-Read-only **Avaya Communication Manager (CM 10.x)** dashboard for the Network Operations Centre.
+**Feel the pulse of PABX.**
 
-The UI runs in a browser (IIS). It talks to CM with **OSSI over SSH :5022** (not SAT scraping). Call records are collected separately on **TCP :9000**.
+A **read-only** Network Operations Centre dashboard for **Avaya Aura Communication Manager (CM 10.x)**. One browser screen for trunks, media gateways, alarms, extensions, a site map, and CDR search — without write access to the PABX.
 
-**Purpose:** one screen for trunks, media gateways, alarms, extensions, a Hong Kong site map, and CDR search — without write access to the PABX.
-
-Live install: IIS nested `/CM` (often port 8888). Source: `https://github.com/w1n555/Avaya-PABX-Network-Monitoring-for-NOC`
-
----
-
-## What the NOC sees
-
-| Tab | What it shows | How it is updated |
-|-----|----------------|-------------------|
-| **Map View** | Offline Hong Kong map. Site pin: **DOWN / Major = red**, **Minor = yellow**, otherwise **green**. KPI Major/Minor = **gateway boxes + CM-own** (e.g. one G450 + one CM T1 = 2). | Cache from Gateway + Alarm. Same 90s pack. |
-| **Trunk** | Monitored trunk groups only. Util: green &lt;70% · yellow 70–90% · red &gt;90% or Idle=0. `0/0/0` this poll → **UPDATE FAILED**. | Backend Auto **90s** `status trunk N`. |
-| **Gateway** | `list media-gateway`. **Reg=n** = DOWN. Missing this poll (incomplete SAT list) = **UPDATE FAILED** (sticky last hostname/IP). Click-in: `list configuration media-gateway`. | Same 90s pack. Open Details also refresh that MG. |
-| **Extension** | Inventory: `list extension` + `list station` (port / name). | **Hourly**, queued so it never overlaps the 90s pack. |
-| **CDR** | Search daily call files (cap **5000**, red if capped). Logger pill **UP/DOWN**. Default From/To = **today**. | TCP logger on **:9000**. Not OSSI. |
-| **Alarm** | Active alarms only (`display alarms`). Date Alarmed newest first. Search + mtce type filters. | Same 90s pack. |
-
-**Webpage flash (not CM):** Active **MAJOR** (CM or any G450 MJ) → red flash. Else **MINOR** → yellow. **WARNING does not flash**. **Ack** stops the webpage flash only — it does **not** clear alarms on CM.
-
-**Before Login:** every tab is dimmed. Login / tab buttons stay usable. After Login, all tabs light up.
+Live URL (typical nested IIS): `http://<host>:8888/CM/`  
+Source: https://github.com/w1n555/Avaya-PABX-Network-Monitoring-for-NOC
 
 ---
 
-## Architecture
+## Why this exists
 
-```text
-Browser (HTML / CSS / JS)
-    │  /CM/api/*
-    ▼
-CmApi (.NET, IIS)          thin proxy · can start the Python bridge
-    │  http://127.0.0.1:18776
-    ▼
-python/ossi_service.py     one OssiSession, bind 0.0.0.0:18776
-    │  SSH :5022  terminal ossit
-    ▼
-Avaya CM                   list / display / status only (read-only)
+NOC staff should not live in SAT. SAT is one login, one screen, one command at a time. When a site is down, a trunk is congested, or a station is forwarded off-net, the operator needs **the whole picture in seconds**, not a walk through `status trunk`, `display alarms`, and `list media-gateway`.
 
-CDR TCP 0.0.0.0:9000  →  cdr-link/cdr/YYYYMMDD.TXT
-```
+Pulse is built for that gap:
 
-**One OSSI connection.** Commands are serialised (`_ossi_lock`). Each major OSSI tab has its own parse module:
+- **See the network, not a terminal.** Map pins, utilisation bars, and alarm flash on one page.
+- **Read-only on purpose.** Only `list` / `display` / `status` over OSSI. A RO CM login (e.g. `monitor`) cannot change the switch.
+- **One CM session, used fairly.** One SSH OSSI connection is shared and queued, so Login, 90s refresh, and click-in details do not trample each other.
+- **Stay on the board.** F5 keeps the session. Closing the tab frees the CM login after about five minutes.
 
-| Tab | Parse file | CM command |
-|-----|------------|------------|
-| Trunk | `python/trunk_parse.py` | `status trunk N`, `list trunk-group` |
-| Alarm | `python/alarm_parse.py` | `display alarms` |
-| Gateway | `python/gateway_parse.py` | `list media-gateway`, `list configuration media-gateway` |
-| Extension | `python/extension_parse.py` | `list extension`, `list station` |
-| Map | *(none)* | Uses Gateway + Alarm cache |
-| CDR | `cdr-link/cdr_logger.py` | Not OSSI |
-
-The SSH/OSSI wire (send `c` / `t`, answer SAT `more?[y]`) lives in bundled `vendor/avaya-ossi`.
+It does **not** replace Avaya System Manager or SAT for administration. It is the NOC wall and the first look when something is wrong.
 
 ---
 
-## Auto refresh (90 seconds) — backend owned
+## What you get
 
-The browser **does not** drive the 90s pack. Python does.
+| Tab | Function |
+|-----|----------|
+| **Map View** | Offline Hong Kong map. Pin: Major / DOWN = red, Minor = yellow, otherwise green. |
+| **Trunk** | Monitored trunk groups only. Util: green &lt;70%, yellow 70–90%, red &gt;90% or Idle=0. This poll `0/0/0` = **UPDATE FAILED**. |
+| **Gateway** | Media-gateway list (Reg=n = DOWN). Click-in: modules, ports, assigned extensions. |
+| **Extension** | Full number list (station + UDP fill). Click a list-extension number for identity, CM form (COR/COS, DND, CF, ECF), and digital **button assignment**. UDP-only / analog have no keys. |
+| **CDR** | Search daily call files. Cap **5000** (red if capped). Default From/To = **today**. Logger pill UP/DOWN. |
+| **Alarm** | Active alarms, newest first. Search and mtce-type filters. |
 
-Every **90s** while a logged-in UI is present, the bridge runs **one pack**:
+**Webpage flash (not CM):** active **MAJOR** → red flash; else **MINOR** → yellow. **WARNING does not flash.** **Ack** stops the webpage flash only — it does **not** clear alarms on CM.
 
-1. `status trunk N` for each **monitored** trunk group (writes cache after each TG)  
-2. `display alarms`  
-3. `list media-gateway`  
-4. If Gateway Details is open: `list configuration media-gateway <mg>`
+**Before Login** every tab is dimmed. After Login all tabs light up.
 
-The UI only **displays** countdown + cache (`Next: Ns` / `Updating trunks…` / `Auto update complete — next in Ns`). Status chip is on the **far right** of every OSSI tab header.
+**Auto 90s (while logged in):** `status trunk` (monitored TGs) → `display alarms` → `list media-gateway` → open MG configuration if Gateway Details is open. The header chip shows countdown / phase only.
 
-**Login** still runs a live pack (progress bar). **F5** keeps the OSSI session and shows cache + server countdown — it does **not** fire an extra pack. **Manual Refresh** on Trunk was removed.
+**Login also loads** extension inventory (`list extension` + `list station` + `list uniform-dialplan`) and the trunk-group name catalogue. Extension inventory then refreshes **hourly** (queued).
 
-**Why backend pack:** browser HTTP sometimes missed one of the three OSSI calls (Alarm fail skipped Gateway). Python writes each cache independently, so a miss on one command does not drop the others.
-
-`list media-gateway` waits up to **3 seconds of silence after `more?[y]` pages** so SAT lists of ~58 GWs are not cut short. This idle is **not** a 3-second timeout on all OSSI commands (`status trunk` is unchanged; overall command cap remains 600s).
-
----
-
-## Login and session
-
-- Login is **manual** (CM host, RO user e.g. `monitor`, password).  
-- Password is held in **bridge memory only** — **never written under wwwroot**.  
-- **F5 / Ctrl+F5** keeps the OSSI session (no disconnect on refresh).  
-- **Close the browser tab:** heartbeat stops → OSSI logoff after about **5 minutes** (frees the CM login slot).  
-- CM SSH idle logoff: **30 minutes** with no command (heartbeat + 90s pack keep the session alive while the UI is open).  
-- Heartbeat every **15s** from the browser (keepalive only — does not run `display time` on that path).
+**OSSI jobs are queued** (add/remove trunk, extension details, gateway details). The UI shows *Queued — waiting for OSSI…* instead of a raw HTTP error.
 
 ---
 
-## Safety (for management)
+## Install
 
-- OSSI commands are **list / display / status** only. Use a **read-only** CM login.  
-- Do **not** put the CM password in files under the web root.  
-- Only **CDR** is logged to disk (`cdr-link/cdr/`). Do not log OSSI sessions.  
-- Default pack is **90s** and **monitored TGs only** — not every trunk every second.  
-- `list uniform-dialplan` was timed at ~**28s / ~3100 records** on this CM; it is **not** in the 90s pack (would steal the single OSSI slot).
-
----
-
-## File structure
-
-```text
-<install folder>/
-  index.html  style.css  app.js  *-ui.js  web.config
-  map/                  # sites.json + offline tiles
-  python/ossi_service.py
-  python/*_parse.py
-  vendor/avaya-ossi/    # bundled OSSI SSH client
-  cdr-link/             # CDR logger
-  api/                  # published CmApi
-  src/CmApi/            # C# source
-  data_live/            # runtime JSON (not in git)
-  scripts/install.ps1
-  README.md
-```
-
----
-
-## Deploy
-
-**Goal:** extract → `install.ps1` → open browser → Login.
+**Need:** Windows IIS (you install IIS), Administrator PowerShell, internet the first time (Hosting Bundle / Python if missing).
 
 ```powershell
 cd <extract>\scripts
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-Requires IIS (script detects, does not install IIS). Script can install .NET 8 Hosting Bundle and Python 3.12, create venv, bind OSSI **0.0.0.0:18776**, nest the site as **`/CM`** without changing the IIS site root.
+1. Install **IIS** (Windows Features) yourself.  
+2. Extract this package to any folder (example: `C:\inetpub\wwwroot\CM`).  
+3. Run `install.ps1` as Admin. Confirm the package root when asked.  
+4. Open the URL it prints, typically `http://127.0.0.1:8888/CM/`.  
+5. Enter **your** CM Host + RO user + password → **Login**.
 
-Daily use: open `http://<host>:<port>/CM/` → Host / Password → **Login**.
+The script does **not** install IIS and does **not** replace the parent site homepage. Nested mode only adds `/CM` and `/CM/api` on the existing IIS site/port.
 
-Same command upgrades an existing install (`git pull` if `.git` is present) and **keeps** `monitored_trunks.json`.
+Same command **upgrades** an existing install (`git pull` if `.git` is present) and **keeps** the monitored trunk list.
 
-Details: `INSTALL.txt`.
+Optional flags: `-SkipDotNetInstall`, `-SkipPythonInstall`, `-SkipUpdate`, `-NonInteractive -RootPath "C:\path" -SitePort 8888`.  
+Dedicated site on a free port: `-IisMode Dedicated -SitePort 8890`.  
+Full installer notes: `INSTALL.txt`.
 
----
-
-## This update (for review)
-
-- **90s Auto pack moved to Python.** Frontend is display + heartbeat only.  
-- Status chip: one box per tab, far right, countdown + phase text.  
-- Logged-out: **all tabs dimmed**.  
-- Gateway incomplete `list media-gateway`: **UPDATE FAILED** on missing MG# (not DOWN). Map pins still follow alarm/DOWN rules (FAILED is not treated as DOWN).  
-- `list media-gateway` **more?[y] idle 3s** (that command only).  
-- Trunk manual Refresh button removed.  
-- Login hint: close-tab logoff **~5 minutes**.  
-- Dead UI timers / leftover Refresh listeners removed.
+You do **not** need a separate OSSI repo or to start the bridge by hand every day.
 
 ---
 
-## GitHub
+## Configuration
+
+| Item | Default / rule |
+|------|----------------|
+| IIS path | Nested `/CM` on your existing site port (often **8888**) |
+| OSSI | SSH **:5022**, terminal **ossit**, one session, bind **0.0.0.0:18776** |
+| CM login | Read-only account (e.g. `monitor`). Password stays in **bridge memory only** — never a file under wwwroot |
+| Auto pack | **90 seconds**, monitored trunks only |
+| Close tab | OSSI logoff after about **5 minutes** (frees the CM login slot) |
+| CM idle | **30 minutes** with no command (heartbeat + 90s pack keep it alive while the UI is open) |
+| Heartbeat | Browser every **15s** (keepalive only) |
+| CDR | TCP **:9000** → `cdr-link/cdr/YYYYMMDD.TXT`. Not OSSI |
+| Map sites | `map/sites.json` (edit coordinates / names; do not invent sites) |
+| Monitored trunks | Saved on the server (`data_live` / install data). Notes can also be local |
+
+**Safety**
+
+- Commands are **list / display / status** only.  
+- Do not store the CM password under the web root.  
+- Only CDR is written as call logs. Do not log OSSI sessions.
+
+---
+
+## Use
+
+1. Open `http://<host>:<port>/CM/`.  
+2. Host / Port **5022** / User / Password → **Login**. Wait for the progress bar (trunks, alarms, gateways, then extension list — the last step can take a few minutes).  
+3. Work the tabs. **F5** refreshes the page and **keeps** the OSSI session.  
+4. **Logout** when finished, or close the tab (session ends after ~5 minutes).
+
+**Trunk:** add a TG number (queued). Click the TG for channels. Remove is queued.  
+**Gateway:** click hostname for modules and ports.  
+**Extension:** search / type filters. Click a list-extension number (not `udp-ext`). Identity is from cache; CM form is live OSSI (`display station` + `status station` for DND / CF / ECF). Digital sets show **Button Assignment** keys **1–24**. Analog / CallrID have no keys.  
+**Alarm:** Ack = stop flash on this webpage only.  
+**CDR:** From/To default today; results cap 5000.
+
+---
+
+## Layout (on disk)
+
+```text
+index.html  style.css  app.js  *-ui.js   UI
+map/                                    sites + offline tiles
+python/ossi_service.py  *_parse.py      one OSSI process
+vendor/avaya-ossi/                      SSH / OSSI client
+cdr-link/                               CDR logger
+api/                                    published CmApi
+data_live/                              runtime JSON (not in git)
+scripts/install.ps1
+```
+
+---
 
 https://github.com/w1n555/Avaya-PABX-Network-Monitoring-for-NOC
