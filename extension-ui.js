@@ -379,15 +379,6 @@ function fmtUpdated(iso) {
   }
 }
 
-function setExtStatus(_msg) {
-  /* Auto status chip is owned by app.js paintAutoStatusChip */
-}
-
-function paintExtUpdated() {
-  const el = document.getElementById("ext-meta-updated");
-  if (el) el.textContent = fmtUpdated(EXT.data.lastUpdate);
-}
-
 function typesFromItems() {
   const set = new Set();
   for (const r of EXT.data.items || []) {
@@ -505,10 +496,6 @@ function renderExtTable() {
     .join("");
 }
 
-function paintExtCountdown() {
-  /* countdown chip removed — app.js owns Auto status */
-}
-
 function applyExtPayload(data) {
   if (!data || typeof data !== "object") return false;
   let d = data;
@@ -524,7 +511,6 @@ function applyExtPayload(data) {
   // Incomplete more? cut short — keep fuller cache
   if (prev.length >= 100 && incoming.length > 0 && incoming.length < prev.length * 0.5) {
     console.warn("extension payload looks truncated", incoming.length, "vs", prev.length);
-    setExtStatus(`list extension incomplete (${incoming.length}) — keeping last ${prev.length}`);
     return false;
   }
   EXT.data = {
@@ -538,7 +524,6 @@ function applyExtPayload(data) {
   paintExtTypeFilters();
   paintExtSummary();
   renderExtTable();
-  paintExtUpdated();
   return true;
 }
 
@@ -559,22 +544,9 @@ async function forceOssiExtensions() {
   const payload = res && (res.extensions || (res.extensionRefresh ? res : null));
   if (payload) {
     applyExtPayload(payload);
-    const t = payload.timing || res.timing;
     const n = (EXT.data.items || []).length;
     if (payload.error && !n) {
       throw new Error(payload.error);
-    }
-    if (payload.error && n) {
-      setExtStatus(`${n} extensions (cache kept · ${payload.error})`);
-      return true;
-    }
-    if (t && t.listSec != null) {
-      const ports = t.portRows != null ? t.portRows : (EXT.data.summary && EXT.data.summary.portCount);
-      const st = t.stationSec != null ? ` + list station ${t.stationSec}s` : "";
-      const extra = ports != null ? ` · ${ports} ports` : "";
-      setExtStatus(`list extension ${t.listSec}s${st} (${t.rows ?? n} rows${extra})`);
-    } else {
-      setExtStatus(`${n} extensions`);
     }
     return true;
   }
@@ -616,7 +588,6 @@ async function loadExtensions(opts = {}) {
   const force = !!opts.force;
   const showModal = !!opts.showModal;
   EXT.loading = true;
-  paintExtCountdown();
   if (force) renderExtTable();
   await loadGatewayMap();
 
@@ -628,24 +599,18 @@ async function loadExtensions(opts = {}) {
         showProgress("Loading Extensions", "OSSI list extension + list station + list uniform-dialplan…");
         setProgress(15, "list extension + list station + list uniform-dialplan (may take ~1–2 min)…");
       }
-      setExtStatus(showModal ? "Updating extensions…" : "Queued / updating list extension + uniform-dialplan…");
       try {
         await forceOssiExtensions();
         liveOk = true;
       } catch (e) {
         forceErr = e;
         console.warn("list extension:", e?.message || e);
-        setExtStatus(friendlyExtError(e));
       }
     }
 
     // Cache paint: tab show, or OSSI force failed (still show last good list)
     if (!liveOk) {
-      const cached = await loadExtCacheOnly();
-      if (cached && forceErr) {
-        const n = (EXT.data.items || []).length;
-        setExtStatus(`Showing cache ${n} · ${friendlyExtError(forceErr)}`);
-      }
+      await loadExtCacheOnly();
     }
 
     if (force && showModal) {
@@ -663,32 +628,21 @@ async function loadExtensions(opts = {}) {
     }
   } finally {
     EXT.loading = false;
-    paintExtCountdown();
-    paintExtUpdated();
   }
   return EXT.data;
-}
-
-function startExtCountdownPaint() {
-  /* no local countdown timer */
 }
 
 export function setExtensionSessionConnected(connected) {
   EXT.connected = !!connected;
   if (!EXT.connected) {
-    setExtStatus("");
     EXT.nextAt = 0;
-    paintExtCountdown();
   } else {
-    startExtCountdownPaint();
     loadExtensions({ force: false, showModal: false }).catch(() => {});
-    paintExtCountdown();
   }
 }
 
 export function setExtensionTabActive(active) {
   EXT.tabActive = !!active;
-  paintExtCountdown();
 }
 
 export function setOssiBusy(busy) {
@@ -697,10 +651,8 @@ export function setOssiBusy(busy) {
 
 export function onExtensionTabShow() {
   EXT.tabActive = true;
-  startExtCountdownPaint();
   loadExtensions({ force: false, showModal: false }).catch(() => {});
   renderExtTable();
-  paintExtCountdown();
 }
 
 /** Run OSSI list extension + uniform-dialplan (caller must own queue / not overlap 60s pack). */
@@ -717,7 +669,6 @@ export async function runExtensionRefresh(opts = {}) {
 
 export function armExtensionNext(fromNowMs = EXTENSION_INTERVAL_MS) {
   EXT.nextAt = Date.now() + Math.max(1000, fromNowMs);
-  paintExtCountdown();
 }
 
 export function getExtensionNextAt() {
@@ -856,8 +807,6 @@ export async function runExtensionDetailRefresh(ext, opts = {}) {
 }
 
 export function initExtensionUi() {
-  startExtCountdownPaint();
-
   const search = document.getElementById("ext-search");
   if (search) {
     search.addEventListener("input", () => {

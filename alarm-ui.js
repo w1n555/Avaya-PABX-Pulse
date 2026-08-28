@@ -6,7 +6,7 @@
  */
 
 import { showProgress, setProgress, finishProgress } from "./cdr-ui.js";
-import { getGatewayMjMn } from "./gateway-ui.js?v=20260825i";
+import { getGatewayMjMn } from "./gateway-ui.js?v=20260827a";
 
 /** Magic TG for refresh/one when CmApi has no /alarms route. */
 const TG_ACTIVE = 9996;
@@ -124,15 +124,6 @@ export function applyAlarmFlash() {
 }
 
 if (typeof window !== "undefined") window.__cmApplyAlarmFlash = applyAlarmFlash;
-
-function setAlarmStatus(_msg) {
-  /* Auto status chip is owned by app.js paintAutoStatusChip */
-}
-
-function paintAlarmUpdated() {
-  const el = document.getElementById("alarm-meta-updated");
-  if (el) el.textContent = fmtUpdated(ALARM.data.lastUpdate);
-}
 
 function mtceTypesActive() {
   const set = new Set();
@@ -255,10 +246,6 @@ function renderAlarmTable() {
     .join("");
 }
 
-function paintAlarmCountdown() {
-  /* countdown chip removed — app.js owns Auto status */
-}
-
 function applyAlarmPayload(data) {
   if (!data || typeof data !== "object") return false;
   let d = data;
@@ -299,7 +286,6 @@ function applyAlarmPayload(data) {
   paintAlarmTypeFilters();
   paintAlarmSummary();
   renderAlarmTable();
-  paintAlarmUpdated();
   applyAlarmFlash();
   return true;
 }
@@ -312,13 +298,6 @@ async function forceOssiActive() {
   const payload = res && (res.alarms || (res.alarmRefresh ? res : null));
   if (payload) {
     applyAlarmPayload(payload);
-    const t = payload.timing || res.timing;
-    const n = (ALARM.data.active || []).length;
-    if (t && t.activeSec != null) {
-      setAlarmStatus(`Active ${t.activeSec}s (${t.activeRows ?? n} rows)`);
-    } else {
-      setAlarmStatus(`Active ${n} rows`);
-    }
     return true;
   }
   throw new Error((res && (res.error || res.Error)) || "refresh/one returned no alarm payload");
@@ -328,7 +307,6 @@ async function loadAlarms(opts = {}) {
   const force = !!opts.force;
   const showModal = !!opts.showModal;
   ALARM.loading = true;
-  paintAlarmCountdown();
 
   let ok = false;
   try {
@@ -336,23 +314,19 @@ async function loadAlarms(opts = {}) {
       if (showModal) {
         showProgress("Loading Active Alarms", "OSSI display alarms…");
         setProgress(15, "display alarms (Active)…");
-        setAlarmStatus("Updating alarms…");
         try {
           await forceOssiActive();
           ok = true;
         } catch (e) {
           console.warn("alarm active:", e?.message || e);
-          setAlarmStatus(String(e.message || e));
         }
         setProgress(100, ok ? "Complete" : "Failed");
         finishProgress(ok, ok ? "Refresh complete" : (document.getElementById("alarm-auto-status")?.textContent || "Alarm update incomplete"));
       } else {
-        setAlarmStatus("Auto update…");
         try {
           await forceOssiActive();
           ok = true;
         } catch (e) {
-          setAlarmStatus("Auto update incomplete");
           console.warn("alarm auto:", e?.message || e);
         }
       }
@@ -388,14 +362,8 @@ async function loadAlarms(opts = {}) {
     }
   } finally {
     ALARM.loading = false;
-    paintAlarmCountdown();
-    paintAlarmUpdated();
   }
   return ALARM.data;
-}
-
-function startCountdownPaint() {
-  /* no local countdown timer */
 }
 
 export function setAlarmSessionConnected(connected) {
@@ -407,18 +375,13 @@ export function setAlarmSessionConnected(connected) {
     ALARM.ackedFp = "";
     document.getElementById("btn-flash-yellow")?.classList.remove("is-on");
     document.getElementById("btn-flash-red")?.classList.remove("is-on");
-    setAlarmStatus("");
-    paintAlarmCountdown();
   } else {
-    startCountdownPaint();
     loadAlarms({ force: false, showModal: false }).catch(() => {});
-    paintAlarmCountdown();
   }
 }
 
 export function setAlarmTabActive(active) {
   ALARM.tabActive = !!active;
-  paintAlarmCountdown();
 }
 
 export function setOssiBusy(busy) {
@@ -431,11 +394,9 @@ export function setOssiBusy(busy) {
 
 export function onAlarmTabShow() {
   ALARM.tabActive = true;
-  startCountdownPaint();
   // Cache only — do not start a second display alarms (that shrinks the table mid-page)
   loadAlarms({ force: false, showModal: false }).catch(() => {});
   renderAlarmTable();
-  paintAlarmCountdown();
 }
 
 /** Called after Trunk cycle — silent Active Alarm + flash. */
@@ -468,12 +429,9 @@ export function syncAlarmCountdown(nextAtMs) {
     const maxAt = Date.now() + 90 * 1000;
     ALARM.nextAt = Math.min(t, maxAt);
   }
-  paintAlarmCountdown();
 }
 
 export function initAlarmUi() {
-  startCountdownPaint();
-
   const search = document.getElementById("alarm-search");
   if (search) {
     search.addEventListener("input", () => {
@@ -489,7 +447,6 @@ export function initAlarmUi() {
     document.getElementById("btn-flash-yellow")?.classList.remove("is-on");
     document.getElementById("btn-flash-red")?.classList.remove("is-on");
     applyAlarmFlash();
-    setAlarmStatus("Acked — page flash stopped (CM unchanged)");
   });
 
   document.getElementById("btn-flash-yellow")?.addEventListener("click", () => {
@@ -510,5 +467,4 @@ export function initAlarmUi() {
 
   paintAlarmSummary();
   renderAlarmTable();
-  paintAlarmUpdated();
 }

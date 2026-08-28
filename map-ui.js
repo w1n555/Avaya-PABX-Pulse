@@ -7,7 +7,7 @@
  * CM as 1 if it has its own (non-GGGV*) alarm, e.g. 1 G450 + 1 CM T1 = 2.
  */
 
-import { openGatewayDetail } from "./gateway-ui.js?v=20260825i";
+import { openGatewayDetail } from "./gateway-ui.js?v=20260827a";
 
 function apiUrlMap(path) {
   let dir = window.location.pathname || "/";

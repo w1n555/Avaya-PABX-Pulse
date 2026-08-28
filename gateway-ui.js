@@ -79,10 +79,6 @@ function fmtUpdated(iso) {
   }
 }
 
-function setGwStatus(_msg) {
-  /* Auto status chip is owned by app.js paintAutoStatusChip */
-}
-
 function paintGwUpdated() {
   const ts = fmtUpdated(GW.data.lastUpdate);
   const card = document.getElementById("gw-stat-updated");
@@ -239,10 +235,6 @@ function renderGwTable() {
     .join("");
 }
 
-function paintGwCountdown() {
-  /* countdown chip removed — app.js owns Auto status */
-}
-
 export function getOpenGatewayDetailMg() {
   if (!GW.tabActive || !GW.detailMg) return null;
   const pane = document.getElementById("gw-detail-view");
@@ -275,7 +267,6 @@ function applyGwPayload(data) {
   let incoming = Array.isArray(d.items) ? d.items : [];
   const prev = GW.data.items || [];
   if (prev.length > 0 && incoming.length === 0) {
-    setGwStatus("list media-gateway empty — keeping last, Auto will retry");
     return false;
   }
   if (prev.length > incoming.length && incoming.length > 0) {
@@ -284,9 +275,6 @@ function applyGwPayload(data) {
       .filter((g) => !seen.has(Number(g.mg)))
       .map((g) => ({ ...g, error: "UPDATE FAILED" }));
     incoming = incoming.concat(extra);
-    setGwStatus(
-      `list media-gateway ${incoming.length - extra.length} live · ${extra.length} UPDATE FAILED`
-    );
   }
   GW.data = {
     ok: d.ok !== false,
@@ -314,13 +302,6 @@ async function forceOssiGateways() {
   const payload = res && (res.gateways || (res.gatewayRefresh ? res : null));
   if (payload) {
     applyGwPayload(payload);
-    const t = payload.timing || res.timing;
-    const n = (GW.data.items || []).length;
-    if (t && t.listSec != null) {
-      setGwStatus(`list media-gateway ${t.listSec}s (${t.rows ?? n} GW)`);
-    } else {
-      setGwStatus(`${n} gateways`);
-    }
     return true;
   }
   throw new Error((res && (res.error || res.Error)) || "refresh/one returned no gateway payload");
@@ -330,7 +311,6 @@ async function loadGateways(opts = {}) {
   const force = !!opts.force;
   const showModal = !!opts.showModal;
   GW.loading = true;
-  paintGwCountdown();
   if (force) renderGwTable();
 
   let ok = false;
@@ -339,13 +319,11 @@ async function loadGateways(opts = {}) {
       if (showModal) {
         showProgress("Loading Media Gateways", "OSSI list media-gateway…");
         setProgress(20, "list media-gateway…");
-        setGwStatus("Updating gateways…");
         try {
           await forceOssiGateways();
           ok = true;
         } catch (e) {
           console.warn("gateway list:", e?.message || e);
-          setGwStatus(String(e.message || e));
         }
         setProgress(100, ok ? "Complete" : "Failed");
         finishProgress(
@@ -353,12 +331,10 @@ async function loadGateways(opts = {}) {
           ok ? "Refresh complete" : document.getElementById("gw-auto-status")?.textContent || "Gateway update incomplete"
         );
       } else {
-        setGwStatus("Auto update…");
         try {
           await forceOssiGateways();
           ok = true;
         } catch (e) {
-          setGwStatus("Auto update incomplete");
           console.warn("gateway auto:", e?.message || e);
         }
       }
@@ -394,31 +370,20 @@ async function loadGateways(opts = {}) {
     }
   } finally {
     GW.loading = false;
-    paintGwCountdown();
     paintGwUpdated();
   }
   return GW.data;
 }
 
-function startGwCountdownPaint() {
-  /* no local countdown timer */
-}
-
 export function setGatewaySessionConnected(connected) {
   GW.connected = !!connected;
-  if (!GW.connected) {
-    setGwStatus("");
-    paintGwCountdown();
-  } else {
-    startGwCountdownPaint();
+  if (GW.connected) {
     loadGateways({ force: false, showModal: false }).catch(() => {});
-    paintGwCountdown();
   }
 }
 
 export function setGatewayTabActive(active) {
   GW.tabActive = !!active;
-  paintGwCountdown();
 }
 
 export function setOssiBusy(busy) {
@@ -431,11 +396,9 @@ export function setOssiBusy(busy) {
 
 export function onGatewayTabShow() {
   GW.tabActive = true;
-  startGwCountdownPaint();
-  // Cache only — Auto 60s / login pack refreshes list media-gateway
+  // Cache only — Auto 90s / login pack refreshes list media-gateway
   loadGateways({ force: false, showModal: false }).catch(() => {});
   renderGwTable();
-  paintGwCountdown();
 }
 
 /** Called after Trunk + Alarm cycle — silent list media-gateway. */
@@ -468,7 +431,6 @@ export function syncGatewayCountdown(nextAtMs) {
     const maxAt = Date.now() + 90 * 1000;
     GW.nextAt = Math.min(t, maxAt);
   }
-  paintGwCountdown();
 }
 
 function gwRowByMg(mg) {
@@ -651,9 +613,7 @@ export function openGatewayDetail(mg, opts = {}) {
   if (typeof enqueue === "function") {
     enqueue(n, { showModal: opts.showModal !== false });
   } else {
-    runGatewayConfigRefresh(n, { showModal: opts.showModal !== false }).catch((e) => {
-      setGwStatus(String(e.message || e));
-    });
+    runGatewayConfigRefresh(n, { showModal: opts.showModal !== false }).catch(() => {});
   }
 }
 
@@ -727,14 +687,12 @@ export async function runGatewayConfigRefresh(mg, opts = {}) {
     showProgress(`MG ${n} configuration`, "OSSI list configuration media-gateway…");
     setProgress(25, `list configuration media-gateway ${n}…`);
   }
-  setGwStatus(`list configuration media-gateway ${n}…`);
   let payload = null;
   try {
     payload = await fetchGwConfigPayload(n);
   } catch (e) {
     const msg = friendlyGwConfigError(e);
     const keep = GW.configByMg[n] && (GW.configByMg[n].boards || []).length ? GW.configByMg[n] : null;
-    setGwStatus(keep ? "OSSI busy — keeping last configuration" : msg);
     if (GW.detailMg === n) {
       paintGwDetailBody(keep || { boards: [], assigned: [] }, keep ? "" : msg);
     }
@@ -749,20 +707,13 @@ export async function runGatewayConfigRefresh(mg, opts = {}) {
   const incoming = (payload.boards || []).length;
   if (incoming) GW.configByMg[n] = payload;
   else if (GW.configByMg[n] && (GW.configByMg[n].boards || []).length) {
-    setGwStatus(payload.error || "config incomplete — keeping last");
     payload = GW.configByMg[n];
   } else {
     GW.configByMg[n] = payload;
   }
   GW.configLoadingMg = 0;
   GW.loading = false;
-  const t = payload.timing || {};
   const nBoard = (payload.boards || []).length;
-  setGwStatus(
-    payload.error
-      ? String(payload.error)
-      : `list configuration media-gateway ${n} ${t.listSec != null ? t.listSec + "s" : ""} · ${nBoard} boards`
-  );
   await refreshAlarmPortMap();
   if (GW.detailMg === n) {
     paintGwDetailHeader(n);
@@ -775,7 +726,6 @@ export async function runGatewayConfigRefresh(mg, opts = {}) {
 }
 
 export function initGatewayUi() {
-  startGwCountdownPaint();
   refreshAlarmPortMap().catch(() => {});
 
   const search = document.getElementById("gw-search");

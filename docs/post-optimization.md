@@ -9,11 +9,11 @@ Pulse grew by many small live changes on IIS (`C:\inetpub\wwwroot\CM`). After ea
 | Item | What | Status |
 |------|------|--------|
 | **1** | Disk junk (old DLL backups, publish tmp, disabled starters) | **Done** |
-| **2** | Duplicate `web/` copy of the live UI | **Not done** — plan only |
+| **2** | Duplicate `web/` copy of the live UI | **Done** |
 | **3** | One OSSI bridge: port **18776** + folder **`data_live`** | **Done** |
-| **4** | Dead / leftover JavaScript (empty painters, Flash test, double Login bind) | **Not done** — plan only |
+| **4** | Dead / leftover JavaScript | **4a + 4c done.** Flash test buttons (4b) still in UI. Helper merge (4d) not done. |
 
-Git: `c2438f8` (items 1 + 3 + operator README). Live session was **not** recycled for that commit.
+Git: `c2438f8` (items 1 + 3 + operator README). Item 2 is the `web/` removal in a later commit. Live session was **not** recycled for these cleanups.
 
 ---
 
@@ -50,9 +50,9 @@ Counts are **source text** (git), 2026-08-27. Map tiles (`map/tiles/`, ~965 JPEG
 | Live app source (UI + Python + C# + scripts, **no** `web/`, no vendor) | **~17 800** | Running system |
 | Git app source **including** `web/` | **~28 100** | Two UI trees |
 
-**Item 2** is almost all of the “thousands of lines”: deleting `web/` removes **~9.3k UI lines** (about **33–37% of git-tracked app text**). It does **not** shrink the running dashboard — IIS already loads the root files.
+**Item 2** (done) removed that extra **~9.3k UI lines** from git (about **33–37% of previously tracked app text**). It does **not** shrink the running dashboard — IIS already loaded the root files.
 
-**Item 4** is small: on the order of **100–250 lines** in the live UI (~**2–3%** of live JS/HTML). Same leftovers exist again under `web/` until item 2 is done.
+**Item 4** is small: on the order of **100–250 lines** in the live UI (~**2–3%** of live JS/HTML).
 
 **Items 1 + 3** (already shipped) were not a line-count win. Git net on 1+3 was about **54 insertions / 42 deletions** of source, plus **~3.4 MB** of untracked `api/*.old_*` binaries.
 
@@ -126,42 +126,49 @@ Also aligned:
 
 ---
 
-## Item 2 — delete duplicate `web/` (plan only, do not do yet)
+## Item 2 — delete duplicate `web/` (done)
 
 ### Why
 
-Git tracks a second full UI under `web/`. Hashes matched the root files. The browser loads **root** `index.html` (`<script src="app.js?v=…">`), not `web/app.js`. Every UI change had to be copied twice or the copies drifted.
+Git tracked a second full UI under `web/`. Hashes matched the root files. The browser loads **root** `index.html` (`<script src="app.js?v=…">`), not `web/app.js`. Every UI change had to be copied twice or the copies drifted.
 
-### Need to do (when approved)
+### What we did
 
-1. **Confirm nothing live reads `web/`.** IIS `web.config` + nested `/CM` use the site root. `install.ps1` does not copy `web/`.
-2. **Retire or patch `scripts/one-click-deploy.ps1`.** It still does `Copy-Item web\* → site root` and **throws if `web` is missing**. That script is already documented as deprecated (`ONE-CLICK-DEPLOY.txt` → use `install.ps1`). Either delete it or point it at the root files.
-3. **Delete `web/`** from git (UI js/html/css, duplicate `logo.png` / `favicon.png`, duplicate `vendor/leaflet`, `web/README.md`, `web/map/sites.json`).
-4. **Do not** move the live UI *into* `web/` and leave the root empty — IIS would 404.
+1. Confirmed live does not read `web/`: IIS `web.config` default document is root `index.html`; `install.ps1` never copies `web/`.
+2. Retired `scripts/one-click-deploy.ps1` to a stub that tells you to run `install.ps1` (exit 1). The old script copied `web\*` onto the site root and **threw if `web` was missing**.
+3. `git rm -r web/` — UI js/html/css, duplicate `logo.png` / `favicon.png`, duplicate `vendor/leaflet`, `web/README.md`, `web/map/sites.json`.
+4. Left the **root** UI in place (moving it into `web/` would 404 IIS).
 
-Keep **root** as the only source of truth (matches how the site already runs).
+Root is the only source of truth.
 
-### Risk
+### Test (done)
 
-- Someone still running `one-click-deploy.ps1` without the patch.
-- Confusion with the old GitHub snapshot under `C:\Users\…\source\Avaya-PABX-Network-Monitoring-for-NOC` (already marked `MOVED.txt`).
+- Root still has `index.html`, `app.js`, `*-ui.js`, `style.css`, `logo.png`, `favicon.png`, `vendor/leaflet`, `map/sites.json`.
+- `web/` folder gone.
+- Bridge `http://127.0.0.1:18776/health` still `ossi-bridge` / connected (no recycle).
+- HTTP GET site `/CM/` and `/CM/app.js` / `/CM/style.css` still 200 from the root files.
+- `scripts/one-click-deploy.ps1` no longer references a `web` folder.
 
-### Test after (when we do it)
-
-- Open `/CM/` — same tabs, same CSS cache token.
-- Ctrl+F5; Login still works (module `app.js` from root).
-- Map tiles still from `map/tiles/` (not under `web/`).
-- `git grep web/` in `scripts/` and `src/` is only `web.config`.
-
-**Estimated git deletion:** ~9.3k lines of UI + leaflet/README. **Live behaviour:** unchanged if step 1–2 are right.
+**Git:** ~9.3k UI lines + leaflet/README removed from the repo. **Live dashboard:** same files as before.
 
 ---
 
-## Item 4 — leftover JavaScript (plan only, do not do yet)
+## Item 4 — leftover JavaScript
 
-Do this **after** item 2 (or do live files only, then delete `web/` so you do not edit twice).
+### 4a — safe no-ops (done)
 
-### 4a — safe no-ops (recommended first)
+Removed empty / dead helpers and every call site:
+
+- `setExtStatus`, `paintExtCountdown`, `paintExtUpdated`, `startExtCountdownPaint`
+- `setAlarmStatus`, `paintAlarmCountdown`, `paintAlarmUpdated`, `startCountdownPaint`
+- `setGwStatus`, `paintGwCountdown`, `startGwCountdownPaint`
+- unused `sleep()` and deprecated `paintCmTime()` in `app.js` (logout now calls `clearCmTimeAnchor()`)
+
+**Kept** `paintGwUpdated()` — it still writes the live KPI `gw-stat-updated`.
+
+Cache token bumped to `?v=20260827a` so browsers pick up the modules.
+
+### 4a leftovers (original plan)
 
 Empty or dead because the Auto chip moved to `app.js`:
 
@@ -180,11 +187,9 @@ Remove the functions **and** their call sites. Do not leave `foo();` calling not
 
 `index.html` buttons `btn-flash-yellow` / `btn-flash-red` plus `ALARM.manualYellow` / `manualRed` in `alarm-ui.js`. Production test only. **Ack** stays.
 
-### 4c — Login bound twice (bug leftover)
+### 4c — Login bound twice (done)
 
-`index.html` inline script binds `#btn-connect` → `__cmConnect`. `app.js` `init()` also `addEventListener("click", connect)`. One click can run **connect() twice**.
-
-Keep **one** bind: either the inline delayed bind (module not ready yet) **or** `app.js` only, with the inline script only waiting for `__cmConnect` if you keep it. Do not keep both listeners.
+Removed the extra `app.js` `init()` listener on `#btn-connect`. Login is bound **once** in `index.html` (waits for `window.__cmConnect` after the module loads). Logout stays on `app.js`.
 
 ### 4d — copy-paste helpers (optional, later)
 
@@ -207,11 +212,9 @@ Keep **one** bind: either the inline delayed bind (module not ready yet) **or** 
 
 ---
 
-## Suggested order (when you say go)
+## Suggested order (remaining)
 
-1. Item **2** (`web/` + `one-click-deploy.ps1`), then item **4a** on the **single** remaining UI tree.  
-2. Item **4c** (double Login) in the same UI pass if you want.  
-3. Item **4b** only after you confirm the Flash test buttons can go.  
-4. Leave **4d** and magic-TG cleanup for a later refactor.
+1. Item **4b** only after you confirm the Flash test buttons can go.  
+2. Leave **4d** and magic-TG cleanup for a later refactor.
 
-After each step: the test list above, then push. Do not run `install.ps1` unless you intend to drop the OSSI session.
+Do not run `install.ps1` unless you intend to drop the OSSI session.

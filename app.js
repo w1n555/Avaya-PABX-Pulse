@@ -19,7 +19,7 @@ import {
   refreshAlarmsSilent,
   syncAlarmCountdown,
   setOssiBusy as setAlarmOssiBusy,
-} from "./alarm-ui.js?v=20260825i";
+} from "./alarm-ui.js?v=20260827a";
 import {
   initGatewayUi,
   onGatewayTabShow,
@@ -31,7 +31,7 @@ import {
   runGatewayConfigRefresh,
   getOpenGatewayDetailMg,
   openGatewayDetail,
-} from "./gateway-ui.js?v=20260825i";
+} from "./gateway-ui.js?v=20260827a";
 import {
   initExtensionUi,
   onExtensionTabShow,
@@ -42,7 +42,7 @@ import {
   EXTENSION_INTERVAL_MS,
   setOssiBusy as setExtensionOssiBusy,
   runExtensionDetailRefresh,
-} from "./extension-ui.js?v=20260826j";
+} from "./extension-ui.js?v=20260827a";
 import {
   initMapUi,
   onMapTabShow,
@@ -51,7 +51,7 @@ import {
   refreshMapFromCache,
   syncMapCountdown,
   setOssiBusy as setMapOssiBusy,
-} from "./map-ui.js?v=20260825i";
+} from "./map-ui.js?v=20260827a";
 
 function setOssiBusy(busy) {
   try {
@@ -2239,15 +2239,6 @@ function paintCmTimeTick() {
   el.textContent = formatCmSystemTime(shown);
 }
 
-/** @deprecated use setCmTimeAnchor / clearCmTimeAnchor / paintCmTimeTick */
-function paintCmTime(info) {
-  if (info == null) {
-    clearCmTimeAnchor();
-    return;
-  }
-  setCmTimeAnchor(info);
-}
-
 async function refreshCmTime(opts = {}) {
   if (!state.connected) return null;
   try {
@@ -2322,7 +2313,7 @@ async function disconnect() {
   clearUiLoggedIn();
   setSessionLabel("Disconnected", false);
   setStatus("Logged out — OSSI session closed. Login again to monitor.");
-  paintCmTime(null);
+  clearCmTimeAnchor();
   setAlarmSessionConnected(false);
   setGatewaySessionConnected(false);
   setExtensionSessionConnected(false);
@@ -2340,10 +2331,6 @@ async function disconnect() {
     if (s2) s2.textContent = "Connect to CM (SSH + OSSI login)";
     if (s3) s3.textContent = "OSSI cache (all tabs)";
   }, 700);
-}
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
 }
 
 /** Solid green Updated flash for full 2s; survives sibling row patches. */
@@ -2577,7 +2564,7 @@ function initThemeToggle() {
 async function init() {
   window.__cmConnect = connect;
   window.__cmDisconnect = disconnect;
-  $("btn-connect")?.addEventListener("click", connect);
+  // Login click is bound once in index.html (waits for this module). Do not bind again.
   $("btn-disconnect")?.addEventListener("click", disconnect);
 
   try {
