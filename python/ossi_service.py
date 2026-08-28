@@ -690,60 +690,12 @@ def refresh_unlocked() -> dict[str, Any]:
 def refresh_one_tg(tg: int) -> dict[str, Any]:
     """Single TG status + immediate write (for on-demand progressive UI).
 
-    Special: tg == ALARM_REFRESH_TG / 9996 → display alarms
-    (kept so old UI /refresh/one still works; new UI POSTs /alarms/refresh).
-    Special: tg == GATEWAY_REFRESH_TG (9995) → list media-gateway + alarm join.
-    Special: tg == EXTENSION_REFRESH_TG (9994) → list extension inventory.
-    Special: tg = EXTENSION_DETAIL_TG_BASE + ext → display station/vdn/hunt-group.
-
     Per-TG OSSI e-line / miss → row.error only (UI Status "UPDATE FAILED").
     Never promote to global lastError / trunk_data.error (login card stays clean).
     Next successful poll clears row.error.
     """
     global _last_refresh_at
     tg_i = int(tg)
-    if tg_i in (ALARM_REFRESH_TG, ALARM_REFRESH_ACTIVE_TG):
-        payload = refresh_alarms()
-        return {
-            "ok": True,
-            "alarms": payload,
-            "item": None,
-            "alarmRefresh": True,
-            "which": "active",
-        }
-    if tg_i == GATEWAY_REFRESH_TG:
-        payload = refresh_gateways()
-        return {
-            "ok": True,
-            "gateways": payload,
-            "item": None,
-            "gatewayRefresh": True,
-        }
-    if tg_i == EXTENSION_REFRESH_TG:
-        payload = refresh_extensions()
-        return {
-            "ok": True,
-            "extensions": payload,
-            "item": None,
-            "extensionRefresh": True,
-        }
-    if GATEWAY_CONFIG_TG_BASE <= tg_i <= GATEWAY_CONFIG_TG_BASE + 999:
-        payload = refresh_gateway_config(tg_i - GATEWAY_CONFIG_TG_BASE)
-        return {
-            "ok": payload.get("ok", True),
-            "gatewayConfig": payload,
-            "item": None,
-            "gatewayConfigRefresh": True,
-        }
-    if EXTENSION_DETAIL_TG_BASE <= tg_i < EXTENSION_DETAIL_TG_BASE + 10_000_000:
-        ext = str(tg_i - EXTENSION_DETAIL_TG_BASE)
-        payload = refresh_extension_detail(ext)
-        return {
-            "ok": payload.get("ok", True),
-            "extensionDetail": payload,
-            "item": None,
-            "extensionDetailRefresh": True,
-        }
     with _lock:
         if not _connected or _session is None:
             raise RuntimeError("Not connected")
@@ -1233,17 +1185,6 @@ def _write_alarms_payload() -> dict[str, Any]:
     except Exception:
         pass
     return payload
-
-
-# Magic TGs for POST /refresh/one — works with old CmApi.dll (no /alarms route).
-ALARM_REFRESH_TG = 9999
-ALARM_REFRESH_ACTIVE_TG = 9996
-GATEWAY_REFRESH_TG = 9995
-EXTENSION_REFRESH_TG = 9994
-# refresh/one tg = 990000 + MG  →  list configuration media-gateway N (old CmApi)
-GATEWAY_CONFIG_TG_BASE = 990000
-# refresh/one tg = 8_000_000 + numeric extension → display station/vdn/hunt-group
-EXTENSION_DETAIL_TG_BASE = 8_000_000
 
 
 def _run_display_alarms_form(

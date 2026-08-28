@@ -899,13 +899,6 @@ function Update-CodeFromGit([string]$root) {
     $dataDir = Join-Path $root $script:OssiDataLeaf
     $legacyData = Join-Path $root "data"
     $backup = Join-Path $env:TEMP ("cm-noc-data-backup-" + [guid]::NewGuid().ToString("N"))
-    foreach ($srcDir in @($dataDir, $legacyData)) {
-        if (Test-Path $srcDir) {
-            New-Item -ItemType Directory -Force -Path $backup | Out-Null
-            Copy-Item (Join-Path $srcDir "*") $backup -Recurse -Force -ErrorAction SilentlyContinue
-            Write-Info "Backed up $(Split-Path $srcDir -Leaf)\ to $backup"
-        }
-    }
 
     Push-Location $root
     try {
@@ -913,6 +906,18 @@ function Update-CodeFromGit([string]$root) {
         try { & $appcmd stop apppool /apppool.name:"$AppPoolName" 2>$null | Out-Null } catch {}
         Stop-BridgeOnPort $script:OssiBridgeLegacyPort
         Stop-BridgeOnPort $script:OssiBridgePort
+        Start-Sleep -Seconds 1
+
+        foreach ($srcDir in @($dataDir, $legacyData)) {
+            if (-not (Test-Path $srcDir)) { continue }
+            try {
+                New-Item -ItemType Directory -Force -Path $backup | Out-Null
+                Copy-Item (Join-Path $srcDir "*") $backup -Recurse -Force -ErrorAction SilentlyContinue
+                Write-Info "Backed up $(Split-Path $srcDir -Leaf)\ to $backup"
+            } catch {
+                Write-Warn "Backup $(Split-Path $srcDir -Leaf) skipped (file in use): $($_.Exception.Message)"
+            }
+        }
 
         # Drop local build junk that blocks clean pull (never needed in git)
         foreach ($junk in @("api_publish_tmp", "api\CmApi.dll.new", "api\CmApi.exe.new")) {

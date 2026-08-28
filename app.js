@@ -3,7 +3,7 @@
  * OSSI via /CM/api · trunk_data.json + monitored_trunks.json
  */
 
-import { apiUrl, fetchJson, escapeHtml } from "./http.js?v=20260827c";
+import { apiUrl, fetchJson, escapeHtml } from "./http.js?v=20260827d";
 import {
   initCdrUi,
   onCdrTabShow,
@@ -11,7 +11,7 @@ import {
   setProgress,
   hideProgress,
   finishProgress,
-} from "./cdr-ui.js?v=20260827c";
+} from "./cdr-ui.js?v=20260827d";
 import {
   initAlarmUi,
   onAlarmTabShow,
@@ -20,7 +20,7 @@ import {
   refreshAlarmsSilent,
   syncAlarmCountdown,
   setOssiBusy as setAlarmOssiBusy,
-} from "./alarm-ui.js?v=20260827c";
+} from "./alarm-ui.js?v=20260827d";
 import {
   initGatewayUi,
   onGatewayTabShow,
@@ -32,7 +32,7 @@ import {
   runGatewayConfigRefresh,
   getOpenGatewayDetailMg,
   openGatewayDetail,
-} from "./gateway-ui.js?v=20260827c";
+} from "./gateway-ui.js?v=20260827d";
 import {
   initExtensionUi,
   onExtensionTabShow,
@@ -43,7 +43,7 @@ import {
   EXTENSION_INTERVAL_MS,
   setOssiBusy as setExtensionOssiBusy,
   runExtensionDetailRefresh,
-} from "./extension-ui.js?v=20260827c";
+} from "./extension-ui.js?v=20260827d";
 import {
   initMapUi,
   onMapTabShow,
@@ -52,7 +52,7 @@ import {
   refreshMapFromCache,
   syncMapCountdown,
   setOssiBusy as setMapOssiBusy,
-} from "./map-ui.js?v=20260827c";
+} from "./map-ui.js?v=20260827d";
 
 function setOssiBusy(busy) {
   try {

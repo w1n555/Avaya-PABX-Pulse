@@ -5,13 +5,10 @@
  * Click list-extension rows (not udp-ext) → Details from cache, then one OSSI display.
  */
 
-import { apiUrl, siteUrl, fetchJson, escapeHtml, fmtUpdated } from "./http.js?v=20260827c";
-import { showProgress, setProgress, finishProgress } from "./cdr-ui.js?v=20260827c";
+import { apiUrl, siteUrl, fetchJson, escapeHtml, fmtUpdated } from "./http.js?v=20260827d";
+import { showProgress, setProgress, finishProgress } from "./cdr-ui.js?v=20260827d";
 
-/** Fallback TG if POST /extensions/refresh is missing. */
-const TG_EXTENSION = 9994;
-/** Fallback refresh/one tg = 8000000 + ext if POST /extensions/detail is missing. */
-const TG_EXT_DETAIL_BASE = 8000000;
+
 /** Max rows painted after filter (full set stays in memory). */
 const SHOW_CAP = 5000;
 /** Hourly auto list extension + uniform-dialplan interval (ms). */
@@ -88,14 +85,6 @@ function ossiCommandForExtType(type) {
     return "display station";
   }
   return null;
-}
-
-/** Fallback magic TG: 8000000 + digits-only ext. Skip if not a finite positive number or > 9999999. */
-function extDetailTg(ext) {
-  const digits = String(ext ?? "").replace(/\D/g, "");
-  const n = Number(digits);
-  if (!Number.isFinite(n) || n <= 0 || n > 9999999) return null;
-  return TG_EXT_DETAIL_BASE + n;
 }
 
 function findExtRow(rowOrExt) {
@@ -487,15 +476,7 @@ function friendlyExtError(err) {
 }
 
 async function forceOssiExtensions() {
-  let res;
-  try {
-    res = await fetchJson(apiUrl("extensions/refresh"), { method: "POST", body: "{}" });
-  } catch {
-    res = await fetchJson(apiUrl("refresh/one"), {
-      method: "POST",
-      body: JSON.stringify({ tg: TG_EXTENSION }),
-    });
-  }
+  const res = await fetchJson(apiUrl("extensions/refresh"), { method: "POST", body: "{}" });
   if (!applyExtPayload(res)) {
     throw new Error((res && (res.error || res.Error)) || "extensions/refresh returned no payload");
   }
@@ -658,11 +639,6 @@ export function openExtensionDetail(rowOrExt, opts = {}) {
     setExtFormStatus("Login required for CM form.");
     return;
   }
-  const tg = extDetailTg(ext);
-  if (tg == null) {
-    setExtFormStatus("No CM form for this type (cache identity only).");
-    return;
-  }
   setExtFormStatus(`Queued ${cmd} … waiting for OSSI`);
   const enqueue = window.__cmEnqueueExtDetail;
   if (typeof enqueue === "function") {
@@ -678,8 +654,7 @@ export async function runExtensionDetailRefresh(ext, opts = {}) {
   const row = findExtRow(extStr);
   const type = opts.type || (row && row.type) || "";
   const cmd = ossiCommandForExtType(type) || "display station";
-  const tg = extDetailTg(extStr);
-  if (!extStr || tg == null) return null;
+  if (!extStr) return null;
 
   if (showModal) {
     showProgress(`Extension ${extStr}`, `${cmd}…`);
@@ -692,18 +667,10 @@ export async function runExtensionDetailRefresh(ext, opts = {}) {
 
   let payload = null;
   try {
-    let res;
-    try {
-      res = await fetchJson(apiUrl("extensions/detail"), {
-        method: "POST",
-        body: JSON.stringify({ extension: extStr, type }),
-      });
-    } catch {
-      res = await fetchJson(apiUrl("refresh/one"), {
-        method: "POST",
-        body: JSON.stringify({ tg }),
-      });
-    }
+    const res = await fetchJson(apiUrl("extensions/detail"), {
+      method: "POST",
+      body: JSON.stringify({ extension: extStr, type }),
+    });
     payload = pickExtDetailPayload(res);
     if (!payload) {
       throw new Error((res && (res.error || res.Error)) || "extensions/detail returned no payload");

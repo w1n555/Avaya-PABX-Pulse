@@ -219,6 +219,6 @@ Backup tag before this change: **`pre-4d`**. Cache token **`20260827b`**. Flash 
 ## Suggested order (remaining)
 
 1. Item **4b** stays — Flash Yellow / Flash Red are for demo.  
-2. Magic-TG: UI now prefers `/alarms/refresh`, `/gateways/refresh`, `/extensions/refresh`, `/gateways/config`, `/extensions/detail`. Old `refresh/one` TGs remain as fallback. Tag **`pre-magic-tg`**.
+2. Magic-TG fallback **removed** (JS + Python). UI only uses `/alarms/refresh`, `/gateways/refresh`, `/extensions/refresh`, `/gateways/config`, `/extensions/detail`. Real trunk `refresh/one` stays. Tags: `pre-magic-tg`, then this drop.
 
 Do not run `install.ps1` unless you intend to drop the OSSI session.

@@ -4,13 +4,8 @@
  * Session Auto 60s (Trunk checkbox) packs Trunk + Alarm + Gateway.
  */
 
-import { apiUrl, siteUrl, fetchJson, escapeHtml, fmtUpdated } from "./http.js?v=20260827c";
-import { showProgress, setProgress, finishProgress } from "./cdr-ui.js?v=20260827c";
-
-/** Fallback TG if POST /gateways/refresh is missing. */
-const TG_GATEWAY = 9995;
-/** Fallback refresh/one tg = 990000 + MG if POST /gateways/config is missing. */
-const TG_GW_CONFIG_BASE = 990000;
+import { apiUrl, siteUrl, fetchJson, escapeHtml, fmtUpdated } from "./http.js?v=20260827d";
+import { showProgress, setProgress, finishProgress } from "./cdr-ui.js?v=20260827d";
 
 const GW = {
   data: { items: [], summary: {} },
@@ -245,15 +240,7 @@ function applyGwPayload(data) {
 }
 
 async function forceOssiGateways() {
-  let res;
-  try {
-    res = await fetchJson(apiUrl("gateways/refresh"), { method: "POST", body: "{}" });
-  } catch {
-    res = await fetchJson(apiUrl("refresh/one"), {
-      method: "POST",
-      body: JSON.stringify({ tg: TG_GATEWAY }),
-    });
-  }
+  const res = await fetchJson(apiUrl("gateways/refresh"), { method: "POST", body: "{}" });
   if (applyGwPayload(res)) return true;
   throw new Error((res && (res.error || res.Error)) || "gateways/refresh returned no payload");
 }
@@ -602,17 +589,6 @@ async function fetchGwConfigPayload(n) {
     lastErr = e;
   }
   if (haveCache) throw lastErr || new Error("gateways/config failed");
-  try {
-    const res = await fetchJson(apiUrl("refresh/one"), {
-      method: "POST",
-      body: JSON.stringify({ tg: TG_GW_CONFIG_BASE + n }),
-    });
-    const payload = pickGwConfigPayload(res);
-    if (payload) return payload;
-    lastErr = (res && (res.error || res.Error)) || lastErr;
-  } catch (e) {
-    lastErr = e;
-  }
   throw new Error(friendlyGwConfigError(lastErr));
 }
 

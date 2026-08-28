@@ -5,12 +5,9 @@
  * Ack = stop webpage flash only (NOT CM clear).
  */
 
-import { apiUrl, siteUrl, fetchJson, escapeHtml, fmtUpdated } from "./http.js?v=20260827c";
-import { showProgress, setProgress, finishProgress } from "./cdr-ui.js?v=20260827c";
-import { getGatewayMjMn } from "./gateway-ui.js?v=20260827c";
-
-/** Fallback TG for refresh/one if POST /alarms/refresh is missing. */
-const TG_ACTIVE = 9996;
+import { apiUrl, siteUrl, fetchJson, escapeHtml, fmtUpdated } from "./http.js?v=20260827d";
+import { showProgress, setProgress, finishProgress } from "./cdr-ui.js?v=20260827d";
+import { getGatewayMjMn } from "./gateway-ui.js?v=20260827d";
 
 const ALARM = {
   data: { active: [], mtceTypes: [], summary: {} },
@@ -241,15 +238,7 @@ function applyAlarmPayload(data) {
 }
 
 async function forceOssiActive() {
-  let res;
-  try {
-    res = await fetchJson(apiUrl("alarms/refresh"), { method: "POST", body: "{}" });
-  } catch {
-    res = await fetchJson(apiUrl("refresh/one"), {
-      method: "POST",
-      body: JSON.stringify({ tg: TG_ACTIVE }),
-    });
-  }
+  const res = await fetchJson(apiUrl("alarms/refresh"), { method: "POST", body: "{}" });
   if (applyAlarmPayload(res)) return true;
   throw new Error((res && (res.error || res.Error)) || "alarms/refresh returned no payload");
 }
