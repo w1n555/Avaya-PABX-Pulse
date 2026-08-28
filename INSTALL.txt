@@ -1,5 +1,5 @@
-Avaya NOC — easy install (ZIP → IIS → Login)
-============================================
+Avaya PABX Pulse — easy install (ZIP → IIS → Login)
+===================================================
 
 Your goal (supported):
   1. Install IIS yourself (Windows Features)

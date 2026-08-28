@@ -1,7 +1,7 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-  One-click IIS setup for Avaya NOC dashboard (easy path).
+  One-click IIS setup for Avaya PABX Pulse (easy path).
 
   User installs IIS themselves. This script:
     1) Detects IIS
@@ -315,7 +315,7 @@ function Read-UserPath([string]$defaultPath) {
     }
     Write-Host ""
     Write-Host "============================================================" -ForegroundColor White
-    Write-Host "  Avaya NOC - one-click IIS setup" -ForegroundColor White
+    Write-Host "  Avaya PABX Pulse - one-click IIS setup" -ForegroundColor White
     Write-Host "============================================================" -ForegroundColor White
     Write-Host ""
     Write-Host "Where did you put this app? (ZIP extract / local root path)"
