@@ -5,7 +5,8 @@
  * Click list-extension rows (not udp-ext) → Details from cache, then one OSSI display.
  */
 
-import { showProgress, setProgress, finishProgress } from "./cdr-ui.js";
+import { apiUrl, siteUrl, fetchJson, escapeHtml, fmtUpdated } from "./http.js?v=20260827b";
+import { showProgress, setProgress, finishProgress } from "./cdr-ui.js?v=20260827b";
 
 /** Magic TG for refresh/one when CmApi has no /extensions route. */
 const TG_EXTENSION = 9994;
@@ -15,37 +16,6 @@ const TG_EXT_DETAIL_BASE = 8000000;
 const SHOW_CAP = 5000;
 /** Hourly auto list extension + uniform-dialplan interval (ms). */
 export const EXTENSION_INTERVAL_MS = 60 * 60 * 1000;
-
-function apiUrlExt(path) {
-  let dir = window.location.pathname || "/";
-  if (/\.html?$/i.test(dir)) dir = dir.replace(/\/[^/]*$/, "/");
-  else if (!dir.endsWith("/")) dir += "/";
-  return dir + "api/" + String(path).replace(/^\//, "");
-}
-
-function siteUrlExt(path) {
-  let dir = window.location.pathname || "/";
-  if (/\.html?$/i.test(dir)) dir = dir.replace(/\/[^/]*$/, "/");
-  else if (!dir.endsWith("/")) dir += "/";
-  return dir + String(path).replace(/^\//, "");
-}
-
-async function fetchJsonExt(url, opts = {}) {
-  const res = await fetch(url, {
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
-    ...opts,
-  });
-  const text = await res.text();
-  let body = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = { raw: text };
-  }
-  if (!res.ok) throw new Error((body && (body.error || body.Error)) || res.statusText);
-  return body && typeof body === "object" ? body : {};
-}
 
 const EXT = {
   data: { items: [], summary: {} },
@@ -337,13 +307,13 @@ function ingestGatewayItems(items) {
 
 async function loadGatewayMap() {
   try {
-    const data = await fetchJsonExt(apiUrlExt("gateways"));
+    const data = await fetchJson(apiUrl("gateways"));
     if (ingestGatewayItems(data && data.items)) return true;
   } catch {
     /* old DLL / 404 */
   }
   try {
-    const td = await fetchJsonExt(apiUrlExt("trunk-data"));
+    const td = await fetchJson(apiUrl("trunk-data"));
     const inner = td.data || td;
     const items = inner && inner.gateways && inner.gateways.items;
     if (ingestGatewayItems(items)) return true;
@@ -351,32 +321,12 @@ async function loadGatewayMap() {
     /* ignore */
   }
   try {
-    const data = await fetchJsonExt(siteUrlExt("gateways_cache.json") + "?t=" + Date.now());
+    const data = await fetchJson(siteUrl("gateways_cache.json") + "?t=" + Date.now());
     if (ingestGatewayItems(data && data.items)) return true;
   } catch {
     /* ignore */
   }
   return false;
-}
-
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function fmtUpdated(iso) {
-  if (!iso) return "—";
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return String(iso).slice(0, 19);
-    const p = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-  } catch {
-    return String(iso).slice(0, 19);
-  }
 }
 
 function typesFromItems() {
@@ -537,7 +487,7 @@ function friendlyExtError(err) {
 }
 
 async function forceOssiExtensions() {
-  const res = await fetchJsonExt(apiUrlExt("refresh/one"), {
+  const res = await fetchJson(apiUrl("refresh/one"), {
     method: "POST",
     body: JSON.stringify({ tg: TG_EXTENSION }),
   });
@@ -556,13 +506,13 @@ async function forceOssiExtensions() {
 async function loadExtCacheOnly() {
   let data = null;
   try {
-    data = await fetchJsonExt(apiUrlExt("extensions"));
+    data = await fetchJson(apiUrl("extensions"));
   } catch {
     /* 404 old DLL */
   }
   if (!data || !Array.isArray(data.items)) {
     try {
-      const td = await fetchJsonExt(apiUrlExt("trunk-data"));
+      const td = await fetchJson(apiUrl("trunk-data"));
       const inner = td.data || td;
       if (inner && inner.extensions) data = inner.extensions;
     } catch {
@@ -571,7 +521,7 @@ async function loadExtCacheOnly() {
   }
   if (!data || !Array.isArray(data.items)) {
     try {
-      data = await fetchJsonExt(siteUrlExt("extensions_cache.json") + "?t=" + Date.now());
+      data = await fetchJson(siteUrl("extensions_cache.json") + "?t=" + Date.now());
     } catch {
       data = null;
     }
@@ -741,7 +691,7 @@ export async function runExtensionDetailRefresh(ext, opts = {}) {
 
   let payload = null;
   try {
-    const res = await fetchJsonExt(apiUrlExt("refresh/one"), {
+    const res = await fetchJson(apiUrl("refresh/one"), {
       method: "POST",
       body: JSON.stringify({ tg }),
     });

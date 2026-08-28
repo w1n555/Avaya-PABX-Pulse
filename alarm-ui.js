@@ -5,42 +5,12 @@
  * Ack = stop webpage flash only (NOT CM clear).
  */
 
-import { showProgress, setProgress, finishProgress } from "./cdr-ui.js";
-import { getGatewayMjMn } from "./gateway-ui.js?v=20260827a";
+import { apiUrl, siteUrl, fetchJson, escapeHtml, fmtUpdated } from "./http.js?v=20260827b";
+import { showProgress, setProgress, finishProgress } from "./cdr-ui.js?v=20260827b";
+import { getGatewayMjMn } from "./gateway-ui.js?v=20260827b";
 
 /** Magic TG for refresh/one when CmApi has no /alarms route. */
 const TG_ACTIVE = 9996;
-
-function apiUrlAlarm(path) {
-  let dir = window.location.pathname || "/";
-  if (/\.html?$/i.test(dir)) dir = dir.replace(/\/[^/]*$/, "/");
-  else if (!dir.endsWith("/")) dir += "/";
-  return dir + "api/" + String(path).replace(/^\//, "");
-}
-
-function siteUrl(path) {
-  let dir = window.location.pathname || "/";
-  if (/\.html?$/i.test(dir)) dir = dir.replace(/\/[^/]*$/, "/");
-  else if (!dir.endsWith("/")) dir += "/";
-  return dir + String(path).replace(/^\//, "");
-}
-
-async function fetchJson(url, opts = {}) {
-  const res = await fetch(url, {
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
-    ...opts,
-  });
-  const text = await res.text();
-  let body = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = { raw: text };
-  }
-  if (!res.ok) throw new Error((body && (body.error || body.Error)) || res.statusText);
-  return body && typeof body === "object" ? body : {};
-}
 
 const ALARM = {
   data: { active: [], mtceTypes: [], summary: {} },
@@ -59,26 +29,6 @@ const ALARM = {
   ossiBusy: false,
   pendingSilent: false,
 };
-
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function fmtUpdated(iso) {
-  if (!iso) return "—";
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return String(iso).slice(0, 19);
-    const p = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-  } catch {
-    return String(iso).slice(0, 19);
-  }
-}
 
 function gwMjMn() {
   try {
@@ -291,7 +241,7 @@ function applyAlarmPayload(data) {
 }
 
 async function forceOssiActive() {
-  const res = await fetchJson(apiUrlAlarm("refresh/one"), {
+  const res = await fetchJson(apiUrl("refresh/one"), {
     method: "POST",
     body: JSON.stringify({ tg: TG_ACTIVE }),
   });
@@ -335,13 +285,13 @@ async function loadAlarms(opts = {}) {
     if (!ok || !force) {
       let data = null;
       try {
-        data = await fetchJson(apiUrlAlarm("alarms"));
+        data = await fetchJson(apiUrl("alarms"));
       } catch {
         /* 404 old DLL */
       }
       if (!data || !Array.isArray(data.active)) {
         try {
-          const td = await fetchJson(apiUrlAlarm("trunk-data"));
+          const td = await fetchJson(apiUrl("trunk-data"));
           const inner = td.data || td;
           if (inner && inner.alarms) data = inner.alarms;
         } catch {

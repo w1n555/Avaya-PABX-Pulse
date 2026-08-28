@@ -3,6 +3,7 @@
  * OSSI via /CM/api · trunk_data.json + monitored_trunks.json
  */
 
+import { apiUrl, fetchJson, escapeHtml } from "./http.js?v=20260827b";
 import {
   initCdrUi,
   onCdrTabShow,
@@ -10,7 +11,7 @@ import {
   setProgress,
   hideProgress,
   finishProgress,
-} from "./cdr-ui.js";
+} from "./cdr-ui.js?v=20260827b";
 import {
   initAlarmUi,
   onAlarmTabShow,
@@ -19,7 +20,7 @@ import {
   refreshAlarmsSilent,
   syncAlarmCountdown,
   setOssiBusy as setAlarmOssiBusy,
-} from "./alarm-ui.js?v=20260827a";
+} from "./alarm-ui.js?v=20260827b";
 import {
   initGatewayUi,
   onGatewayTabShow,
@@ -31,7 +32,7 @@ import {
   runGatewayConfigRefresh,
   getOpenGatewayDetailMg,
   openGatewayDetail,
-} from "./gateway-ui.js?v=20260827a";
+} from "./gateway-ui.js?v=20260827b";
 import {
   initExtensionUi,
   onExtensionTabShow,
@@ -42,7 +43,7 @@ import {
   EXTENSION_INTERVAL_MS,
   setOssiBusy as setExtensionOssiBusy,
   runExtensionDetailRefresh,
-} from "./extension-ui.js?v=20260827a";
+} from "./extension-ui.js?v=20260827b";
 import {
   initMapUi,
   onMapTabShow,
@@ -51,7 +52,7 @@ import {
   refreshMapFromCache,
   syncMapCountdown,
   setOssiBusy as setMapOssiBusy,
-} from "./map-ui.js?v=20260827a";
+} from "./map-ui.js?v=20260827b";
 
 function setOssiBusy(busy) {
   try {
@@ -86,7 +87,6 @@ function paintOssiBusyFromPack() {
   setOssiBusy(!!state.backendRefreshing || due);
 }
 
-const API = "api";
 const REFRESH_INTERVAL_SEC = 90;
 /** Login 後永遠 Auto 90s pack (Python backend) — UI only shows countdown + cache. */
 function autoEnabled() {
@@ -471,13 +471,6 @@ const state = {
   lastCmTimeAt: 0,
 };
 
-function apiUrl(path) {
-  let dir = window.location.pathname || "/";
-  if (/\.html?$/i.test(dir)) dir = dir.replace(/\/[^/]*$/, "/");
-  else if (!dir.endsWith("/")) dir += "/";
-  return dir + API + "/" + String(path).replace(/^\//, "");
-}
-
 function sleepMs(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -504,35 +497,15 @@ async function refreshOneTrunk(tg) {
 }
 
 async function api(path, opts = {}) {
-  let res;
   try {
-    res = await fetch(apiUrl(path), {
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
-      ...opts,
-    });
+    return await fetchJson(apiUrl(path), opts);
   } catch (e) {
-    // Network / browser-extension interception failures
-    throw new Error(e?.message || "Network error");
+    const msg = String(e?.message || e || "");
+    if (e instanceof TypeError || /Failed to fetch|NetworkError|Load failed/i.test(msg)) {
+      throw new Error(msg || "Network error");
+    }
+    throw e instanceof Error ? e : new Error(msg || "Request failed");
   }
-  let body = null;
-  let text = "";
-  try {
-    text = await res.text();
-  } catch {
-    text = "";
-  }
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = { raw: text };
-  }
-  if (!res.ok) {
-    const err = (body && (body.error || body.Error)) || res.statusText || "Request failed";
-    throw new Error(err);
-  }
-  // Always return a plain object (never undefined) so callers/extensions don't choke
-  return body && typeof body === "object" ? body : {};
 }
 
 /**
@@ -699,14 +672,6 @@ function fmtKpiTs(iso) {
   } catch {
     return String(iso).replace("T", " ").replace("Z", "").slice(0, 19);
   }
-}
-
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 function utilColorClass(item) {

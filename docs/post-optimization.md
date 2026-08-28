@@ -11,7 +11,7 @@ Pulse grew by many small live changes on IIS (`C:\inetpub\wwwroot\CM`). After ea
 | **1** | Disk junk (old DLL backups, publish tmp, disabled starters) | **Done** |
 | **2** | Duplicate `web/` copy of the live UI | **Done** |
 | **3** | One OSSI bridge: port **18776** + folder **`data_live`** | **Done** |
-| **4** | Dead / leftover JavaScript | **4a + 4c done.** Flash test buttons (4b) still in UI. Helper merge (4d) not done. |
+| **4** | Dead / leftover JavaScript | **4a + 4c + 4d done.** Flash Yellow/Red (4b) kept for demo. |
 
 Git: `c2438f8` (items 1 + 3 + operator README). Item 2 is the `web/` removal in a later commit. Live session was **not** recycled for these cleanups.
 
@@ -191,9 +191,13 @@ Remove the functions **and** their call sites. Do not leave `foo();` calling not
 
 Removed the extra `app.js` `init()` listener on `#btn-connect`. Login is bound **once** in `index.html` (waits for `window.__cmConnect` after the module loads). Logout stays on `app.js`.
 
-### 4d — copy-paste helpers (optional, later)
+### 4d — shared `http.js` (done)
 
-`apiUrl*` / `fetchJson*` / `escapeHtml` are duplicated in `app.js`, `cdr-ui.js`, `alarm-ui.js`, `gateway-ui.js`, `extension-ui.js`, `map-ui.js`. A shared `api.js` would shrink a few hundred lines but is a **refactor**, not a delete. Separate PR from 4a–4c.
+One module: `apiUrl`, `siteUrl`, `fetchJson`, `escapeHtml`, `fmtUpdated`. Tabs import `./http.js?v=20260827b`. `http.js` imports nothing (no cycles).
+
+`app.js` still has `api(path)` for Login / 90s pack / heartbeat — it calls `fetchJson(apiUrl(path))` and keeps the `"Network error"` wrap. CDR `apiGet` / `apiPost` call the same helpers.
+
+Backup tag before this change: **`pre-4d`**. Cache token **`20260827b`**. Flash buttons and magic TGs unchanged.
 
 ### Out of scope for item 4
 
@@ -214,7 +218,7 @@ Removed the extra `app.js` `init()` listener on `#btn-connect`. Login is bound *
 
 ## Suggested order (remaining)
 
-1. Item **4b** only after you confirm the Flash test buttons can go.  
-2. Leave **4d** and magic-TG cleanup for a later refactor.
+1. Item **4b** stays — Flash Yellow / Flash Red are for demo.  
+2. Magic-TG cleanup later (do not mix with UI helper refactors).
 
 Do not run `install.ps1` unless you intend to drop the OSSI session.

@@ -7,38 +7,8 @@
  * CM as 1 if it has its own (non-GGGV*) alarm, e.g. 1 G450 + 1 CM T1 = 2.
  */
 
-import { openGatewayDetail } from "./gateway-ui.js?v=20260827a";
-
-function apiUrlMap(path) {
-  let dir = window.location.pathname || "/";
-  if (/\.html?$/i.test(dir)) dir = dir.replace(/\/[^/]*$/, "/");
-  else if (!dir.endsWith("/")) dir += "/";
-  return dir + "api/" + String(path).replace(/^\//, "");
-}
-
-function siteUrlMap(path) {
-  let dir = window.location.pathname || "/";
-  if (/\.html?$/i.test(dir)) dir = dir.replace(/\/[^/]*$/, "/");
-  else if (!dir.endsWith("/")) dir += "/";
-  return dir + String(path).replace(/^\//, "");
-}
-
-async function fetchJsonMap(url, opts = {}) {
-  const res = await fetch(url, {
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
-    ...opts,
-  });
-  const text = await res.text();
-  let body = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = { raw: text };
-  }
-  if (!res.ok) throw new Error((body && (body.error || body.Error)) || res.statusText);
-  return body && typeof body === "object" ? body : {};
-}
+import { apiUrl, siteUrl, fetchJson, escapeHtml } from "./http.js?v=20260827b";
+import { openGatewayDetail } from "./gateway-ui.js?v=20260827b";
 
 const MAP = {
   connected: false,
@@ -61,14 +31,6 @@ const MAP = {
   fittedOnce: false,
   zoomBound: false,
 };
-
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 export function siteCodeFromHostname(hostname) {
   const h = String(hostname || "").trim();
@@ -663,7 +625,7 @@ function paintAll() {
 }
 
 async function loadSitesFile() {
-  const data = await fetchJsonMap(siteUrlMap("map/sites.json") + "?t=" + Date.now());
+  const data = await fetchJson(siteUrl("map/sites.json") + "?t=" + Date.now());
   const sites = Array.isArray(data.sites) ? data.sites : [];
   MAP.cfg = {
     center: Array.isArray(data.center) && data.center.length === 2 ? data.center : [22.35, 114.15],
@@ -678,7 +640,7 @@ async function loadGatewayCache() {
   let items = [];
   let updated = null;
   try {
-    const data = await fetchJsonMap(apiUrlMap("gateways"));
+    const data = await fetchJson(apiUrl("gateways"));
     if (Array.isArray(data.items)) {
       items = data.items;
       updated = data.lastUpdate || null;
@@ -688,7 +650,7 @@ async function loadGatewayCache() {
   }
   if (!items.length) {
     try {
-      const td = await fetchJsonMap(apiUrlMap("trunk-data"));
+      const td = await fetchJson(apiUrl("trunk-data"));
       const inner = td.data || td;
       const gw = inner && inner.gateways;
       if (gw && Array.isArray(gw.items)) {
@@ -701,7 +663,7 @@ async function loadGatewayCache() {
   }
   if (!items.length) {
     try {
-      const data = await fetchJsonMap(siteUrlMap("gateways_cache.json") + "?t=" + Date.now());
+      const data = await fetchJson(siteUrl("gateways_cache.json") + "?t=" + Date.now());
       if (Array.isArray(data.items)) {
         items = data.items;
         updated = data.lastUpdate || null;
@@ -730,13 +692,13 @@ function unwrapAlarms(data) {
 async function loadAlarmCache() {
   let d = null;
   try {
-    d = unwrapAlarms(await fetchJsonMap(apiUrlMap("alarms")));
+    d = unwrapAlarms(await fetchJson(apiUrl("alarms")));
   } catch {
     /* old DLL */
   }
   if (!d) {
     try {
-      const td = await fetchJsonMap(apiUrlMap("trunk-data"));
+      const td = await fetchJson(apiUrl("trunk-data"));
       d = unwrapAlarms(td);
     } catch {
       /* ignore */
@@ -744,7 +706,7 @@ async function loadAlarmCache() {
   }
   if (!d) {
     try {
-      d = unwrapAlarms(await fetchJsonMap(siteUrlMap("alarms_cache.json") + "?t=" + Date.now()));
+      d = unwrapAlarms(await fetchJson(siteUrl("alarms_cache.json") + "?t=" + Date.now()));
     } catch {
       /* ignore */
     }

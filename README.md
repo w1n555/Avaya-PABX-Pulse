@@ -115,7 +115,7 @@ You do **not** need a separate OSSI repo or to start the bridge by hand every da
 ## Layout (on disk)
 
 ```text
-index.html  style.css  app.js  *-ui.js   UI
+index.html  style.css  app.js  http.js  *-ui.js   UI
 map/                                    sites + offline tiles
 python/ossi_service.py  *_parse.py      one OSSI process
 vendor/avaya-ossi/                      SSH / OSSI client

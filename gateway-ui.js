@@ -4,43 +4,13 @@
  * Session Auto 60s (Trunk checkbox) packs Trunk + Alarm + Gateway.
  */
 
-import { showProgress, setProgress, finishProgress } from "./cdr-ui.js";
+import { apiUrl, siteUrl, fetchJson, escapeHtml, fmtUpdated } from "./http.js?v=20260827b";
+import { showProgress, setProgress, finishProgress } from "./cdr-ui.js?v=20260827b";
 
 /** Magic TG for refresh/one when CmApi has no /gateways route. */
 const TG_GATEWAY = 9995;
 /** refresh/one tg = 990000 + MG → list configuration media-gateway N */
 const TG_GW_CONFIG_BASE = 990000;
-
-function apiUrlGw(path) {
-  let dir = window.location.pathname || "/";
-  if (/\.html?$/i.test(dir)) dir = dir.replace(/\/[^/]*$/, "/");
-  else if (!dir.endsWith("/")) dir += "/";
-  return dir + "api/" + String(path).replace(/^\//, "");
-}
-
-function siteUrlGw(path) {
-  let dir = window.location.pathname || "/";
-  if (/\.html?$/i.test(dir)) dir = dir.replace(/\/[^/]*$/, "/");
-  else if (!dir.endsWith("/")) dir += "/";
-  return dir + String(path).replace(/^\//, "");
-}
-
-async function fetchJsonGw(url, opts = {}) {
-  const res = await fetch(url, {
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
-    ...opts,
-  });
-  const text = await res.text();
-  let body = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = { raw: text };
-  }
-  if (!res.ok) throw new Error((body && (body.error || body.Error)) || res.statusText);
-  return body && typeof body === "object" ? body : {};
-}
 
 const GW = {
   data: { items: [], summary: {} },
@@ -58,26 +28,6 @@ const GW = {
   configLoadingMg: 0,
   detailQuery: "",
 };
-
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function fmtUpdated(iso) {
-  if (!iso) return "—";
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return String(iso).slice(0, 19);
-    const p = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-  } catch {
-    return String(iso).slice(0, 19);
-  }
-}
 
 function paintGwUpdated() {
   const ts = fmtUpdated(GW.data.lastUpdate);
@@ -104,7 +54,7 @@ function normPortKey(port) {
 
 async function refreshAlarmPortMap() {
   try {
-    const data = await fetchJsonGw(apiUrlGw("alarms"));
+    const data = await fetchJson(apiUrl("alarms"));
     const items = (data && (data.active || data.items)) || [];
     const map = {};
     for (const a of items) {
@@ -295,7 +245,7 @@ function applyGwPayload(data) {
 }
 
 async function forceOssiGateways() {
-  const res = await fetchJsonGw(apiUrlGw("refresh/one"), {
+  const res = await fetchJson(apiUrl("refresh/one"), {
     method: "POST",
     body: JSON.stringify({ tg: TG_GATEWAY }),
   });
@@ -343,13 +293,13 @@ async function loadGateways(opts = {}) {
     if (!ok || !force) {
       let data = null;
       try {
-        data = await fetchJsonGw(apiUrlGw("gateways"));
+        data = await fetchJson(apiUrl("gateways"));
       } catch {
         /* 404 old DLL */
       }
       if (!data || !Array.isArray(data.items)) {
         try {
-          const td = await fetchJsonGw(apiUrlGw("trunk-data"));
+          const td = await fetchJson(apiUrl("trunk-data"));
           const inner = td.data || td;
           if (inner && inner.gateways) data = inner.gateways;
         } catch {
@@ -358,7 +308,7 @@ async function loadGateways(opts = {}) {
       }
       if (!data || !Array.isArray(data.items)) {
         try {
-          data = await fetchJsonGw(siteUrlGw("gateways_cache.json") + "?t=" + Date.now());
+          data = await fetchJson(siteUrl("gateways_cache.json") + "?t=" + Date.now());
         } catch {
           data = null;
         }
@@ -640,7 +590,7 @@ async function fetchGwConfigPayload(n) {
   const haveCache = !!(GW.configByMg[n] && (GW.configByMg[n].boards || []).length);
   let lastErr = null;
   try {
-    const res = await fetchJsonGw(apiUrlGw("refresh/one"), {
+    const res = await fetchJson(apiUrl("refresh/one"), {
       method: "POST",
       body: JSON.stringify({ tg: TG_GW_CONFIG_BASE + n }),
     });
@@ -652,7 +602,7 @@ async function fetchGwConfigPayload(n) {
   }
   if (haveCache) throw lastErr || new Error("refresh/one failed");
   try {
-    const res = await fetchJsonGw(apiUrlGw("gateways/config"), {
+    const res = await fetchJson(apiUrl("gateways/config"), {
       method: "POST",
       body: JSON.stringify({ mg: n }),
     });
@@ -663,7 +613,7 @@ async function fetchGwConfigPayload(n) {
   }
   await new Promise((r) => setTimeout(r, 700));
   try {
-    const res = await fetchJsonGw(apiUrlGw("refresh/one"), {
+    const res = await fetchJson(apiUrl("refresh/one"), {
       method: "POST",
       body: JSON.stringify({ tg: TG_GW_CONFIG_BASE + n }),
     });

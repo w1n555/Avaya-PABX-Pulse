@@ -3,6 +3,8 @@
  * Search / Daily / Weekly / Monthly with progress popup (file-by-file %).
  */
 
+import { apiUrl, fetchJson, escapeHtml } from "./http.js?v=20260827b";
+
 function pad2(n) {
   return String(n).padStart(2, "0");
 }
@@ -38,32 +40,8 @@ function fmtDur(sec) {
   return `${m}:${pad2(r)}`;
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function apiUrl(path) {
-  let dir = window.location.pathname || "/";
-  if (/\.html?$/i.test(dir)) dir = dir.replace(/\/[^/]*$/, "/");
-  else if (!dir.endsWith("/")) dir += "/";
-  return dir + "api/" + String(path).replace(/^\//, "");
-}
-
 async function apiGet(path) {
-  const res = await fetch(apiUrl(path), { credentials: "same-origin" });
-  const text = await res.text();
-  let body = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = { raw: text };
-  }
-  if (!res.ok) throw new Error((body && (body.error || body.Error)) || res.statusText);
-  return body;
+  return fetchJson(apiUrl(path));
 }
 
 const CDR = {
@@ -812,21 +790,10 @@ function fmtLastCall(st) {
 }
 
 async function apiPost(path, body) {
-  const res = await fetch(apiUrl(path), {
+  return fetchJson(apiUrl(path), {
     method: "POST",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
     body: body == null ? "{}" : JSON.stringify(body),
   });
-  const text = await res.text();
-  let parsed = null;
-  try {
-    parsed = text ? JSON.parse(text) : null;
-  } catch {
-    parsed = { raw: text };
-  }
-  if (!res.ok) throw new Error((parsed && (parsed.error || parsed.Error)) || res.statusText);
-  return parsed;
 }
 
 async function ensureCdrLoggerIfDown(st) {
