@@ -128,3 +128,5 @@ scripts/install.ps1
 ---
 
 https://github.com/w1n555/Avaya-PABX-Network-Monitoring-for-NOC
+
+Maintainers: leftover cleanup (duplicate `web/`, old ports, dead UI helpers) is in [docs/post-optimization.md](docs/post-optimization.md). Not needed to install or operate.
