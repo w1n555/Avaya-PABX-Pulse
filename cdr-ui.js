@@ -3,7 +3,7 @@
  * Search / Daily / Weekly / Monthly with progress popup (file-by-file %).
  */
 
-import { apiUrl, fetchJson, escapeHtml } from "./http.js?v=20260827b";
+import { apiUrl, fetchJson, escapeHtml } from "./http.js?v=20260827c";
 
 function pad2(n) {
   return String(n).padStart(2, "0");

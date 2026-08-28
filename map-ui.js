@@ -7,8 +7,8 @@
  * CM as 1 if it has its own (non-GGGV*) alarm, e.g. 1 G450 + 1 CM T1 = 2.
  */
 
-import { apiUrl, siteUrl, fetchJson, escapeHtml } from "./http.js?v=20260827b";
-import { openGatewayDetail } from "./gateway-ui.js?v=20260827b";
+import { apiUrl, siteUrl, fetchJson, escapeHtml } from "./http.js?v=20260827c";
+import { openGatewayDetail } from "./gateway-ui.js?v=20260827c";
 
 const MAP = {
   connected: false,

@@ -690,8 +690,8 @@ def refresh_unlocked() -> dict[str, Any]:
 def refresh_one_tg(tg: int) -> dict[str, Any]:
     """Single TG status + immediate write (for on-demand progressive UI).
 
-    Special: tg == ALARM_REFRESH_TG (9999) → force OSSI display alarms
-    (works through old CmApi /refresh/one when /alarms route is missing).
+    Special: tg == ALARM_REFRESH_TG / 9996 → display alarms
+    (kept so old UI /refresh/one still works; new UI POSTs /alarms/refresh).
     Special: tg == GATEWAY_REFRESH_TG (9995) → list media-gateway + alarm join.
     Special: tg == EXTENSION_REFRESH_TG (9994) → list extension inventory.
     Special: tg = EXTENSION_DETAIL_TG_BASE + ext → display station/vdn/hunt-group.

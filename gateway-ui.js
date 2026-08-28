@@ -4,12 +4,12 @@
  * Session Auto 60s (Trunk checkbox) packs Trunk + Alarm + Gateway.
  */
 
-import { apiUrl, siteUrl, fetchJson, escapeHtml, fmtUpdated } from "./http.js?v=20260827b";
-import { showProgress, setProgress, finishProgress } from "./cdr-ui.js?v=20260827b";
+import { apiUrl, siteUrl, fetchJson, escapeHtml, fmtUpdated } from "./http.js?v=20260827c";
+import { showProgress, setProgress, finishProgress } from "./cdr-ui.js?v=20260827c";
 
-/** Magic TG for refresh/one when CmApi has no /gateways route. */
+/** Fallback TG if POST /gateways/refresh is missing. */
 const TG_GATEWAY = 9995;
-/** refresh/one tg = 990000 + MG → list configuration media-gateway N */
+/** Fallback refresh/one tg = 990000 + MG if POST /gateways/config is missing. */
 const TG_GW_CONFIG_BASE = 990000;
 
 const GW = {
@@ -245,16 +245,17 @@ function applyGwPayload(data) {
 }
 
 async function forceOssiGateways() {
-  const res = await fetchJson(apiUrl("refresh/one"), {
-    method: "POST",
-    body: JSON.stringify({ tg: TG_GATEWAY }),
-  });
-  const payload = res && (res.gateways || (res.gatewayRefresh ? res : null));
-  if (payload) {
-    applyGwPayload(payload);
-    return true;
+  let res;
+  try {
+    res = await fetchJson(apiUrl("gateways/refresh"), { method: "POST", body: "{}" });
+  } catch {
+    res = await fetchJson(apiUrl("refresh/one"), {
+      method: "POST",
+      body: JSON.stringify({ tg: TG_GATEWAY }),
+    });
   }
-  throw new Error((res && (res.error || res.Error)) || "refresh/one returned no gateway payload");
+  if (applyGwPayload(res)) return true;
+  throw new Error((res && (res.error || res.Error)) || "gateways/refresh returned no payload");
 }
 
 async function loadGateways(opts = {}) {
@@ -590,9 +591,9 @@ async function fetchGwConfigPayload(n) {
   const haveCache = !!(GW.configByMg[n] && (GW.configByMg[n].boards || []).length);
   let lastErr = null;
   try {
-    const res = await fetchJson(apiUrl("refresh/one"), {
+    const res = await fetchJson(apiUrl("gateways/config"), {
       method: "POST",
-      body: JSON.stringify({ tg: TG_GW_CONFIG_BASE + n }),
+      body: JSON.stringify({ mg: n }),
     });
     const payload = pickGwConfigPayload(res);
     if (payload) return payload;
@@ -600,18 +601,7 @@ async function fetchGwConfigPayload(n) {
   } catch (e) {
     lastErr = e;
   }
-  if (haveCache) throw lastErr || new Error("refresh/one failed");
-  try {
-    const res = await fetchJson(apiUrl("gateways/config"), {
-      method: "POST",
-      body: JSON.stringify({ mg: n }),
-    });
-    const payload = pickGwConfigPayload(res);
-    if (payload) return payload;
-  } catch {
-    /* old CmApi has no POST /gateways/config */
-  }
-  await new Promise((r) => setTimeout(r, 700));
+  if (haveCache) throw lastErr || new Error("gateways/config failed");
   try {
     const res = await fetchJson(apiUrl("refresh/one"), {
       method: "POST",

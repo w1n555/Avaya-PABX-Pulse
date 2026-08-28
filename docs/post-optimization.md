@@ -11,7 +11,7 @@ Pulse grew by many small live changes on IIS (`C:\inetpub\wwwroot\CM`). After ea
 | **1** | Disk junk (old DLL backups, publish tmp, disabled starters) | **Done** |
 | **2** | Duplicate `web/` copy of the live UI | **Done** |
 | **3** | One OSSI bridge: port **18776** + folder **`data_live`** | **Done** |
-| **4** | Dead / leftover JavaScript | **4a + 4c + 4d done.** Flash Yellow/Red (4b) kept for demo. |
+| **4** | Dead / leftover JavaScript | **4a + 4c + 4d done.** Flash Yellow/Red (4b) kept for demo. Magic TG UI prefers real routes (tag `pre-magic-tg`). |
 
 Git: `c2438f8` (items 1 + 3 + operator README). Item 2 is the `web/` removal in a later commit. Live session was **not** recycled for these cleanups.
 
@@ -219,6 +219,6 @@ Backup tag before this change: **`pre-4d`**. Cache token **`20260827b`**. Flash 
 ## Suggested order (remaining)
 
 1. Item **4b** stays — Flash Yellow / Flash Red are for demo.  
-2. Magic-TG cleanup later (do not mix with UI helper refactors).
+2. Magic-TG: UI now prefers `/alarms/refresh`, `/gateways/refresh`, `/extensions/refresh`, `/gateways/config`, `/extensions/detail`. Old `refresh/one` TGs remain as fallback. Tag **`pre-magic-tg`**.
 
 Do not run `install.ps1` unless you intend to drop the OSSI session.

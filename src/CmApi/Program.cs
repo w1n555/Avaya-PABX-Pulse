@@ -435,6 +435,45 @@ app.MapPost("/extensions/refresh", async (OssiBridgeClient bridge) =>
     }
 });
 
+app.MapPost("/extensions/detail", async (HttpRequest req, OssiBridgeClient bridge) =>
+{
+    try
+    {
+        using var doc = await JsonDocument.ParseAsync(req.Body);
+        var ext = "";
+        string? typeHint = null;
+        if (doc.RootElement.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var name in new[] { "extension", "Extension", "ext" })
+            {
+                if (!doc.RootElement.TryGetProperty(name, out var p)) continue;
+                if (p.ValueKind == JsonValueKind.String) ext = p.GetString() ?? "";
+                else if (p.ValueKind == JsonValueKind.Number) ext = p.ToString();
+                if (!string.IsNullOrWhiteSpace(ext)) break;
+            }
+            if (doc.RootElement.TryGetProperty("type", out var t) ||
+                doc.RootElement.TryGetProperty("Type", out t))
+            {
+                if (t.ValueKind == JsonValueKind.String) typeHint = t.GetString();
+            }
+        }
+        if (string.IsNullOrWhiteSpace(ext))
+            return Results.BadRequest(new { ok = false, error = "extension required" });
+        var el = await bridge.PostAsync("extensions/detail", new
+        {
+            extension = ext.Trim(),
+            type = typeHint ?? "",
+        });
+        return Results.Json(el);
+    }
+    catch (Exception ex)
+    {
+        var msg = ex.Message ?? "";
+        var code = msg.Contains("Not connected", StringComparison.OrdinalIgnoreCase) ? 401 : 502;
+        return Results.Json(new { ok = false, error = msg }, statusCode: code);
+    }
+});
+
 app.MapPost("/gateways/config", async (HttpRequest req, OssiBridgeClient bridge) =>
 {
     try

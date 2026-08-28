@@ -5,12 +5,12 @@
  * Click list-extension rows (not udp-ext) → Details from cache, then one OSSI display.
  */
 
-import { apiUrl, siteUrl, fetchJson, escapeHtml, fmtUpdated } from "./http.js?v=20260827b";
-import { showProgress, setProgress, finishProgress } from "./cdr-ui.js?v=20260827b";
+import { apiUrl, siteUrl, fetchJson, escapeHtml, fmtUpdated } from "./http.js?v=20260827c";
+import { showProgress, setProgress, finishProgress } from "./cdr-ui.js?v=20260827c";
 
-/** Magic TG for refresh/one when CmApi has no /extensions route. */
+/** Fallback TG if POST /extensions/refresh is missing. */
 const TG_EXTENSION = 9994;
-/** refresh/one tg = 8000000 + ext digits → display station|vdn|hunt-group. 20002 → 8020002; 700 → 8000700. */
+/** Fallback refresh/one tg = 8000000 + ext if POST /extensions/detail is missing. */
 const TG_EXT_DETAIL_BASE = 8000000;
 /** Max rows painted after filter (full set stays in memory). */
 const SHOW_CAP = 5000;
@@ -90,7 +90,7 @@ function ossiCommandForExtType(type) {
   return null;
 }
 
-/** Magic TG: 8000000 + digits-only ext. Skip if not a finite positive number or > 9999999. */
+/** Fallback magic TG: 8000000 + digits-only ext. Skip if not a finite positive number or > 9999999. */
 function extDetailTg(ext) {
   const digits = String(ext ?? "").replace(/\D/g, "");
   const n = Number(digits);
@@ -487,20 +487,21 @@ function friendlyExtError(err) {
 }
 
 async function forceOssiExtensions() {
-  const res = await fetchJson(apiUrl("refresh/one"), {
-    method: "POST",
-    body: JSON.stringify({ tg: TG_EXTENSION }),
-  });
-  const payload = res && (res.extensions || (res.extensionRefresh ? res : null));
-  if (payload) {
-    applyExtPayload(payload);
-    const n = (EXT.data.items || []).length;
-    if (payload.error && !n) {
-      throw new Error(payload.error);
-    }
-    return true;
+  let res;
+  try {
+    res = await fetchJson(apiUrl("extensions/refresh"), { method: "POST", body: "{}" });
+  } catch {
+    res = await fetchJson(apiUrl("refresh/one"), {
+      method: "POST",
+      body: JSON.stringify({ tg: TG_EXTENSION }),
+    });
   }
-  throw new Error((res && (res.error || res.Error)) || "refresh/one returned no extension payload");
+  if (!applyExtPayload(res)) {
+    throw new Error((res && (res.error || res.Error)) || "extensions/refresh returned no payload");
+  }
+  const n = (EXT.data.items || []).length;
+  if (res && res.error && !n) throw new Error(res.error);
+  return true;
 }
 
 async function loadExtCacheOnly() {
@@ -691,13 +692,21 @@ export async function runExtensionDetailRefresh(ext, opts = {}) {
 
   let payload = null;
   try {
-    const res = await fetchJson(apiUrl("refresh/one"), {
-      method: "POST",
-      body: JSON.stringify({ tg }),
-    });
+    let res;
+    try {
+      res = await fetchJson(apiUrl("extensions/detail"), {
+        method: "POST",
+        body: JSON.stringify({ extension: extStr, type }),
+      });
+    } catch {
+      res = await fetchJson(apiUrl("refresh/one"), {
+        method: "POST",
+        body: JSON.stringify({ tg }),
+      });
+    }
     payload = pickExtDetailPayload(res);
     if (!payload) {
-      throw new Error((res && (res.error || res.Error)) || "refresh/one returned no extension detail");
+      throw new Error((res && (res.error || res.Error)) || "extensions/detail returned no payload");
     }
     if (payload.cacheOnly) {
       applyExtDetailOverlay(payload);

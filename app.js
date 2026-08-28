@@ -3,7 +3,7 @@
  * OSSI via /CM/api · trunk_data.json + monitored_trunks.json
  */
 
-import { apiUrl, fetchJson, escapeHtml } from "./http.js?v=20260827b";
+import { apiUrl, fetchJson, escapeHtml } from "./http.js?v=20260827c";
 import {
   initCdrUi,
   onCdrTabShow,
@@ -11,7 +11,7 @@ import {
   setProgress,
   hideProgress,
   finishProgress,
-} from "./cdr-ui.js?v=20260827b";
+} from "./cdr-ui.js?v=20260827c";
 import {
   initAlarmUi,
   onAlarmTabShow,
@@ -20,7 +20,7 @@ import {
   refreshAlarmsSilent,
   syncAlarmCountdown,
   setOssiBusy as setAlarmOssiBusy,
-} from "./alarm-ui.js?v=20260827b";
+} from "./alarm-ui.js?v=20260827c";
 import {
   initGatewayUi,
   onGatewayTabShow,
@@ -32,7 +32,7 @@ import {
   runGatewayConfigRefresh,
   getOpenGatewayDetailMg,
   openGatewayDetail,
-} from "./gateway-ui.js?v=20260827b";
+} from "./gateway-ui.js?v=20260827c";
 import {
   initExtensionUi,
   onExtensionTabShow,
@@ -43,7 +43,7 @@ import {
   EXTENSION_INTERVAL_MS,
   setOssiBusy as setExtensionOssiBusy,
   runExtensionDetailRefresh,
-} from "./extension-ui.js?v=20260827b";
+} from "./extension-ui.js?v=20260827c";
 import {
   initMapUi,
   onMapTabShow,
@@ -52,7 +52,7 @@ import {
   refreshMapFromCache,
   syncMapCountdown,
   setOssiBusy as setMapOssiBusy,
-} from "./map-ui.js?v=20260827b";
+} from "./map-ui.js?v=20260827c";
 
 function setOssiBusy(busy) {
   try {
@@ -1829,10 +1829,7 @@ async function runLoginOssiCache() {
     state.packPhase = "alarms";
     setLoginOssi("display alarms", 80);
     try {
-      await api("refresh/one", {
-        method: "POST",
-        body: JSON.stringify({ tg: 9996 }),
-      });
+      await api("alarms/refresh", { method: "POST", body: "{}" });
     } catch (e) {
       console.warn("login display alarms:", e?.message || e);
       setLoginOssi(`display alarms (failed — will retry on Auto ${REFRESH_INTERVAL_SEC}s)`, 80);
@@ -1841,10 +1838,7 @@ async function runLoginOssiCache() {
     state.packPhase = "gateways";
     setLoginOssi("list media-gateway", 92);
     try {
-      await api("refresh/one", {
-        method: "POST",
-        body: JSON.stringify({ tg: 9995 }),
-      });
+      await api("gateways/refresh", { method: "POST", body: "{}" });
     } catch (e) {
       console.warn("login list media-gateway:", e?.message || e);
       setLoginOssi(`list media-gateway (failed — will retry on Auto ${REFRESH_INTERVAL_SEC}s)`, 92);
