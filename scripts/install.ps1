@@ -707,7 +707,7 @@ function Set-IisSite([string]$root, [int]$port) {
 
 function Set-Acls([string]$root) {
     Write-Info "Setting folder permissions for IIS..."
-    foreach ($rel in @("", "data", $script:OssiDataLeaf, "python", "api")) {
+    foreach ($rel in @("", $script:OssiDataLeaf, "python", "api")) {
         $p = if ($rel) { Join-Path $root $rel } else { $root }
         if (-not (Test-Path $p)) { continue }
         & icacls $p /grant "IIS_IUSRS:(OI)(CI)M" /T /C /Q 2>$null | Out-Null
@@ -846,7 +846,6 @@ function Test-ExistingInstall([string]$root) {
     if (Test-Path (Join-Path $root "api\CmApi.dll")) { return $true }
     if (Test-Path (Join-Path $root "python\.venv\Scripts\python.exe")) { return $true }
     if (Test-Path (Join-Path $root "$($script:OssiDataLeaf)\monitored_trunks.json")) { return $true }
-    if (Test-Path (Join-Path $root "data\monitored_trunks.json")) { return $true }
     if (Test-GitRepo $root) { return $true }
     return $false
 }
@@ -897,7 +896,6 @@ function Update-CodeFromGit([string]$root) {
 
     Write-Info "Git repo detected - auto-updating code from GitHub..."
     $dataDir = Join-Path $root $script:OssiDataLeaf
-    $legacyData = Join-Path $root "data"
     $backup = Join-Path $env:TEMP ("cm-noc-data-backup-" + [guid]::NewGuid().ToString("N"))
 
     Push-Location $root
@@ -908,7 +906,7 @@ function Update-CodeFromGit([string]$root) {
         Stop-BridgeOnPort $script:OssiBridgePort
         Start-Sleep -Seconds 1
 
-        foreach ($srcDir in @($dataDir, $legacyData)) {
+        foreach ($srcDir in @($dataDir)) {
             if (-not (Test-Path $srcDir)) { continue }
             try {
                 New-Item -ItemType Directory -Force -Path $backup | Out-Null

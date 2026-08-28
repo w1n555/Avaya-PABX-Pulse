@@ -74,7 +74,6 @@ static async Task<IResult> ReadAlarmsFallback(string siteRoot, string dataLiveDi
              {
                  Path.Combine(siteRoot, "alarms_cache.json"),
                  Path.Combine(dataLiveDir, "alarms.json"),
-                 Path.Combine(siteRoot, "data", "alarms.json"),
              })
     {
         if (!File.Exists(p)) continue;
@@ -333,7 +332,6 @@ static async Task<IResult> ReadGatewaysFallback(string siteRoot, string dataLive
              {
                  Path.Combine(siteRoot, "gateways_cache.json"),
                  Path.Combine(dataLiveDir, "gateways.json"),
-                 Path.Combine(siteRoot, "data", "gateways.json"),
              })
     {
         if (!File.Exists(p)) continue;
@@ -387,7 +385,6 @@ static async Task<IResult> ReadExtensionsFallback(string siteRoot, string dataLi
              {
                  Path.Combine(siteRoot, "extensions_cache.json"),
                  Path.Combine(dataLiveDir, "extensions.json"),
-                 Path.Combine(siteRoot, "data", "extensions.json"),
              })
     {
         if (!File.Exists(p)) continue;

@@ -16,11 +16,7 @@ __pycache__/
 *.pyc
 python/.venv/
 .venv/
-data/logs/
-
 # Runtime logs / temp
-data/*.log
-data/*.tmp
 *.log
 
 # OS
