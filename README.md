@@ -5,7 +5,7 @@
 A **read-only** Network Operations Centre dashboard for **Avaya Aura Communication Manager (CM 10.x)**. One browser screen for trunks, media gateways, alarms, extensions, a site map, and CDR search — without write access to the PABX.
 
 Live URL (typical nested IIS): `http://<host>:8888/CM/`  
-Source: https://github.com/w1n555/Avaya-PABX-Network-Monitoring-for-NOC
+Source: https://github.com/w1n555/Avaya-PABX-Pulse
 
 ---
 
@@ -53,7 +53,7 @@ It does **not** replace Avaya System Manager or SAT for administration. It is th
 
 **Get the files** (pick one):
 
-- `git clone https://github.com/w1n555/Avaya-PABX-Network-Monitoring-for-NOC.git` then copy/move into e.g. `C:\inetpub\wwwroot\CM`  
+- `git clone https://github.com/w1n555/Avaya-PABX-Pulse.git` then copy/move into e.g. `C:\inetpub\wwwroot\CM`  
 - Or GitHub → **Releases** → download Source zip → extract to e.g. `C:\inetpub\wwwroot\CM`
 
 Do **not** copy `python\.venv` or `data_live` from another PC (install creates them). Copy `map\sites.json` only if you already have site pins.
@@ -136,6 +136,6 @@ scripts/install.bat   scripts/install.ps1
 
 ---
 
-https://github.com/w1n555/Avaya-PABX-Network-Monitoring-for-NOC
+https://github.com/w1n555/Avaya-PABX-Pulse
 
 Maintainers: leftover cleanup (old ports, dead UI helpers) is in [docs/post-optimization.md](docs/post-optimization.md). Not needed to install or operate.
