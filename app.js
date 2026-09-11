@@ -2653,24 +2653,12 @@ async function init() {
         state.connected = false;
         setSessionLabel("Disconnected", false);
         applyUiMode();
-        await loadMonitoredSoft();
-        try {
-          await loadTrunkData({ soft: true });
-        } catch {
-          /* cache miss OK */
-        }
       }
     } catch {
       clearUiLoggedIn();
       state.connected = false;
       setSessionLabel("Disconnected", false);
       applyUiMode();
-      await loadMonitoredSoft();
-      try {
-        await loadTrunkData({ soft: true });
-      } catch {
-        /* ignore */
-      }
     }
   } catch {
     /* offline bridge */
