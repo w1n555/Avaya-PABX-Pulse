@@ -450,14 +450,14 @@ function Test-AvayaOssiImport([string]$py, [string]$root) {
 function Repair-VenvHome([string]$root, [string]$basePython) {
     $cfg = Join-Path $root "python\.venv\pyvenv.cfg"
     if (-not (Test-Path $cfg)) { return }
-    $home = $null
+    $pyHome = $null
     $runtimePy = Join-Path $root "python\runtime\python.exe"
-    if (Test-Path $runtimePy) { $home = Split-Path $runtimePy }
-    elseif ($basePython -and (Test-Path $basePython)) { $home = Split-Path $basePython }
-    if (-not $home) { return }
+    if (Test-Path $runtimePy) { $pyHome = Split-Path $runtimePy }
+    elseif ($basePython -and (Test-Path $basePython)) { $pyHome = Split-Path $basePython }
+    if (-not $pyHome) { return }
     $lines = Get-Content $cfg
     $out = foreach ($line in $lines) {
-        if ($line -match '^\s*home\s*=') { "home = $home" }
+        if ($line -match '^\s*home\s*=') { "home = $pyHome" }
         else { $line }
     }
     Set-Content -Path $cfg -Value $out -Encoding ASCII
