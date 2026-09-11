@@ -1031,11 +1031,16 @@ function Update-CodeFromGit([string]$root) {
 function Restart-AppPool {
     $appcmd = Get-AppCmd
     if (-not $appcmd) { return }
+    Write-Info "Recycling app pool $AppPoolName (max 12s)..."
     try {
-        & $appcmd stop apppool /apppool.name:"$AppPoolName" 2>$null | Out-Null
-        Start-Sleep -Seconds 2
+        $p = Start-Process -FilePath $appcmd -ArgumentList @("stop", "apppool", "/apppool.name:$AppPoolName") -PassThru -WindowStyle Hidden
+        if ($p -and -not $p.WaitForExit(12000)) {
+            Write-Warn "apppool stop timed out — not waiting (website may still drain)"
+        } else {
+            Start-Sleep -Seconds 1
+        }
         & $appcmd start apppool /apppool.name:"$AppPoolName" 2>$null | Out-Null
-        Write-Ok "Recycled app pool $AppPoolName"
+        Write-Ok "App pool $AppPoolName start requested"
     } catch {
         Write-Warn "Could not recycle app pool: $_"
     }

@@ -2261,7 +2261,13 @@ async function disconnect() {
   try {
     setLoginStep(2, "active", "Closing OSSI session…");
     setLoginPct(55, "session/disconnect…");
-    await api("session/disconnect", { method: "POST", body: "{}" });
+    const ac = new AbortController();
+    const to = setTimeout(() => ac.abort(), 8000);
+    try {
+      await api("session/disconnect", { method: "POST", body: "{}", signal: ac.signal });
+    } finally {
+      clearTimeout(to);
+    }
     setLoginStep(2, "done", "OSSI logged off");
     setLoginPct(85, "OSSI logged off");
   } catch {
