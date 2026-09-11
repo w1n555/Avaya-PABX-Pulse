@@ -49,14 +49,14 @@ It does **not** replace Avaya System Manager or SAT for administration. It is th
 
 ## Install
 
-**Need:** Windows IIS (you install IIS), **Administrator**, internet the first time (Hosting Bundle / Python if missing).
+**You install yourself:** Windows **IIS**, **.NET 8 Hosting Bundle**, **Python 3.11 or 3.12** (Add to PATH). Then Admin `install.bat`.
 
 **Get the files** (pick one):
 
 - `git clone https://github.com/w1n555/Avaya-PABX-Pulse.git` then copy/move into e.g. `C:\inetpub\wwwroot\CM`  
 - Or GitHub → **Releases** → download Source zip → extract to e.g. `C:\inetpub\wwwroot\CM`
 
-**Python:** the GitHub **python-runtime.zip** (Release assets) is a portable `python.exe` + OSSI packages. Extract it to `python\runtime\` under the app. Then **you do not install Python** and the PC does not need internet for pip.
+**OSSI packages (paramiko, etc.):** `python\wheels\` is in the repo. `install.bat` pip-installs from that folder (**no PyPI / no CDN**). You do **not** need a portable `python\runtime`.
 
 Do **not** copy `data_live` from another PC unless you want the same monitored trunks. Copy `map\sites.json` only if you already have site pins.
 

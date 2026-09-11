@@ -489,15 +489,27 @@ function Ensure-PythonVenv([string]$root, [string]$basePython) {
     }
     Repair-VenvHome -root $root -basePython $basePython
     if (Test-AvayaOssiImport -py $venvPy -root $root) {
-        Write-Ok "Python OSSI ready (offline / existing venv): $venvPy"
+        Write-Ok "Python OSSI ready (existing venv): $venvPy"
         return ,$venvPy
     }
-    Write-Info "Installing avaya-ossi + paramiko into site venv (needs internet once)..."
-    $pipOk = $false
+    $wheelDir = Join-Path $root "python\wheels"
+    if (Test-Path $wheelDir) {
+        Write-Info "Installing paramiko from python\wheels (offline, no PyPI)..."
+        try {
+            & $venvPy -m pip install --no-index --find-links $wheelDir setuptools wheel paramiko python-dotenv
+            & $venvPy -m pip install --no-index --no-build-isolation --find-links $wheelDir -e $vendor
+        } catch {
+            Write-Warn "offline pip: $($_.Exception.Message)"
+        }
+        if (Test-AvayaOssiImport -py $venvPy -root $root) {
+            Write-Ok "Python OSSI ready (wheels): $venvPy"
+            return ,$venvPy
+        }
+    }
+    Write-Info "python\wheels miss or incomplete — trying PyPI..."
     try {
         & $venvPy -m pip install -U pip -q
         & $venvPy -m pip install -e $vendor -q
-        if ($LASTEXITCODE -eq 0) { $pipOk = $true }
     } catch {
         Write-Warn "pip install failed: $($_.Exception.Message)"
     }
@@ -506,15 +518,14 @@ function Ensure-PythonVenv([string]$root, [string]$basePython) {
         return ,$venvPy
     }
     throw @"
-Python venv has no avaya-ossi/paramiko and this PC cannot reach PyPI (no CDN/internet).
+Could not install paramiko/avaya-ossi.
 
-USB-copy from a working Pulse PC (same folder names):
-  python\runtime     (~60 MB)   AND
-  python\.venv       (~30 MB)
-into:
-  $root\python\
+This PC needs either:
+  - python\wheels\ (comes with the Pulse package) so pip can install offline, or
+  - internet to PyPI.
 
-Then re-run install.bat. Do not pip on this machine.
+You install Python 3.11+ yourself (Add to PATH), then re-run install.bat.
+Do not need a portable python\runtime.
 "@
 }
 
