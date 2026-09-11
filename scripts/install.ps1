@@ -464,29 +464,29 @@ function Repair-VenvHome([string]$root, [string]$basePython) {
 }
 
 function Ensure-PythonVenv([string]$root, [string]$basePython) {
-    $runtimePy = Join-Path $root "python\runtime\python.exe"
+    $runtimePy = Join-Path $root 'python\runtime\python.exe'
     if (Test-AvayaOssiImport -py $runtimePy -root $root) {
-        Write-Ok "Python OSSI ready (bundled python\runtime): $runtimePy"
+        Write-Ok "Python OSSI ready (bundled runtime): $runtimePy"
         return ,$runtimePy
     }
-    $venvPy = Join-Path $root "python\.venv\Scripts\python.exe"
-    $vendor = Join-Path $root "vendor\avaya-ossi"
+    $venvPy = Join-Path $root 'python\.venv\Scripts\python.exe'
+    $vendor = Join-Path $root 'vendor\avaya-ossi'
     if (-not (Test-Path $vendor)) {
-        throw "Missing vendor\avaya-ossi - ZIP incomplete. Re-download full package."
+        throw 'Missing vendor\avaya-ossi - ZIP incomplete. Re-download full package.'
     }
     if (-not (Test-Path $venvPy)) {
-        Write-Info "Creating Python venv under site (first time)..."
-        & $basePython -m venv (Join-Path $root "python\.venv")
-        if ($LASTEXITCODE -ne 0) { throw "python -m venv failed" }
+        Write-Info 'Creating Python venv under site (first time)...'
+        & $basePython -m venv (Join-Path $root 'python\.venv')
+        if ($LASTEXITCODE -ne 0) { throw 'python -m venv failed' }
     }
     Repair-VenvHome -root $root -basePython $basePython
     if (Test-AvayaOssiImport -py $venvPy -root $root) {
         Write-Ok "Python OSSI ready (existing venv): $venvPy"
         return ,$venvPy
     }
-    $wheelDir = Join-Path $root "python\wheels"
+    $wheelDir = Join-Path $root 'python\wheels'
     if (Test-Path $wheelDir) {
-        Write-Info "Installing paramiko from python\wheels (offline, no PyPI)..."
+        Write-Info 'Installing paramiko from python\wheels (offline, no PyPI)...'
         try {
             & $venvPy -m pip install --no-index --find-links $wheelDir setuptools wheel paramiko python-dotenv
             & $venvPy -m pip install --no-index --no-build-isolation --find-links $wheelDir -e $vendor
@@ -498,7 +498,7 @@ function Ensure-PythonVenv([string]$root, [string]$basePython) {
             return ,$venvPy
         }
     }
-    Write-Info "python\wheels miss or incomplete — trying PyPI..."
+    Write-Info 'python\wheels miss or incomplete - trying PyPI...'
     try {
         & $venvPy -m pip install -U pip -q
         & $venvPy -m pip install -e $vendor -q
@@ -509,39 +509,30 @@ function Ensure-PythonVenv([string]$root, [string]$basePython) {
         Write-Ok "Python OSSI ready: $venvPy"
         return ,$venvPy
     }
-    throw @"
-Could not install paramiko/avaya-ossi.
-
-This PC needs either:
-  - python\wheels\ (comes with the Pulse package) so pip can install offline, or
-  - internet to PyPI.
-
-You install Python 3.11+ yourself (Add to PATH), then re-run install.bat.
-Packages come from python\wheels\ (offline pip).
-"@
+    throw 'Could not install paramiko. Need python\wheels (offline) or internet to PyPI. Install Python 3.11+ then re-run install.bat.'
 }
 
 function Ensure-ApiPublish([string]$root, [switch]$Force) {
-    $apiDll = Join-Path $root "api\CmApi.dll"
-    $csproj = Join-Path $root "src\CmApi\CmApi.csproj"
+    $apiDll = Join-Path $root 'api\CmApi.dll'
+    $csproj = Join-Path $root 'src\CmApi\CmApi.csproj'
     if ((Test-Path $apiDll) -and $SkipPublish -and -not $Force) {
-        Write-Ok "Using existing api\ publish"
+        Write-Ok 'Using existing api publish'
         return
     }
     if (-not (Test-Path $csproj)) {
         if (Test-Path $apiDll) {
-            Write-Warn "No src project; using prebuilt api\"
+            Write-Warn 'No src project; using prebuilt api folder'
             return
         }
-        throw "Neither api\CmApi.dll nor src\CmApi found."
+        throw 'Neither api\CmApi.dll nor src\CmApi found.'
     }
     $dotnet = Find-DotNet
     if (-not $dotnet) {
         if (Test-Path $apiDll) {
-            Write-Warn "dotnet SDK not found; using existing api\"
+            Write-Warn 'dotnet SDK not found; using existing api folder'
             return
         }
-        throw "dotnet not found. Install .NET 8 SDK (or ship prebuilt api\)."
+        throw 'dotnet not found. Install .NET 8 SDK (or ship prebuilt api).'
     }
     Write-Info "Publishing CmApi..."
     $out = Join-Path $root "api"
@@ -660,16 +651,7 @@ function Set-IisNested([string]$root, [int]$port, [string]$alias) {
         $parent = Find-SiteByPhysicalPath -path $parentPath
     }
     if (-not $parent) {
-        throw @"
-Could not find an existing IIS site on port $port (or parent folder of your ROOT).
-Nested mode needs an existing site — we only attach /CM under it.
-
-Fix: IIS Manager -> note Site name that uses port $port, then:
-  .\install.ps1 -ParentSiteName `"ThatSiteName`" -SitePort $port
-
-Only if you want a SEPARATE full site on a FREE port (not shared):
-  .\install.ps1 -IisMode Dedicated -SitePort 8890
-"@
+        throw "Could not find an IIS site on port $port. Nested mode only adds /CM under an existing site. Pass -ParentSiteName or use -IisMode Dedicated -SitePort 8890 on a free port."
     }
 
     # SAFETY: snapshot parent root path BEFORE we touch anything — must be unchanged after
