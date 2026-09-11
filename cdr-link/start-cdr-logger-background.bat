@@ -3,7 +3,6 @@ REM Detached CDR logger — survives closing the console
 setlocal
 set "DIR=C:\inetpub\wwwroot\CM\cdr-link"
 set "PY=C:\inetpub\wwwroot\CM\python\.venv\Scripts\python.exe"
-if not exist "%PY%" set "PY=C:\inetpub\wwwroot\CM\python\runtime\python.exe"
 if not exist "%PY%" set "PY=python"
 if not exist "%DIR%\cdr" mkdir "%DIR%\cdr"
 if not exist "%DIR%\logs" mkdir "%DIR%\logs"

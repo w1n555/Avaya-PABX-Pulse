@@ -203,11 +203,7 @@ function Ensure-DotNetHosting {
 function Find-Python {
     param([string]$Root = "")
     Refresh-Path
-    $cands = @()
-    if ($Root) {
-        $cands += (Join-Path $Root "python\runtime\python.exe")
-    }
-    $cands += @(
+    $cands = @(
         (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313\python.exe"),
         (Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"),
         (Join-Path $env:LOCALAPPDATA "Programs\Python\Python311\python.exe"),
@@ -307,7 +303,7 @@ function Ensure-Python {
     if (-not $NonInteractive) {
         $ans = Read-Host "Install Python 3.12 now? [Y/n]"
         if ($ans -match '^[nN]') {
-            throw "Python 3.11+ is required. Install from https://www.python.org (Add to PATH), then re-run. paramiko installs from python\wheels (no PyPI)."
+            throw "Python 3.11 or 3.12 is required. Install from https://www.python.org (tick Add to PATH), then re-run install.bat. Packages come from python\wheels."
         }
     }
     Install-Python311
@@ -454,11 +450,8 @@ function Test-AvayaOssiImport([string]$py, [string]$root) {
 function Repair-VenvHome([string]$root, [string]$basePython) {
     $cfg = Join-Path $root "python\.venv\pyvenv.cfg"
     if (-not (Test-Path $cfg)) { return }
-    $pyHome = $null
-    $runtimePy = Join-Path $root "python\runtime\python.exe"
-    if ($basePython -and (Test-Path $basePython)) { $pyHome = Split-Path $basePython }
-    elseif (Test-Path $runtimePy) { $pyHome = Split-Path $runtimePy }
-    if (-not $pyHome) { return }
+    if (-not $basePython -or -not (Test-Path $basePython)) { return }
+    $pyHome = Split-Path $basePython
     $lines = Get-Content $cfg
     $out = foreach ($line in $lines) {
         if ($line -match '^\s*home\s*=') { "home = $pyHome" }
@@ -468,11 +461,6 @@ function Repair-VenvHome([string]$root, [string]$basePython) {
 }
 
 function Ensure-PythonVenv([string]$root, [string]$basePython) {
-    $runtimePy = Join-Path $root 'python\runtime\python.exe'
-    if (Test-AvayaOssiImport -py $runtimePy -root $root) {
-        Write-Ok "Python OSSI ready (bundled runtime): $runtimePy"
-        return ,$runtimePy
-    }
     $venvPy = Join-Path $root 'python\.venv\Scripts\python.exe'
     $vendor = Join-Path $root 'vendor\avaya-ossi'
     if (-not (Test-Path $vendor)) {

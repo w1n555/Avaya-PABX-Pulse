@@ -56,7 +56,7 @@ It does **not** replace Avaya System Manager or SAT for administration. It is th
 - `git clone https://github.com/w1n555/Avaya-PABX-Pulse.git` then copy/move into e.g. `C:\inetpub\wwwroot\CM`  
 - Or GitHub → **Releases** → download Source zip → extract to e.g. `C:\inetpub\wwwroot\CM`
 
-**OSSI packages (paramiko, etc.):** `python\wheels\` is in the repo. `install.bat` pip-installs from that folder (**no PyPI / no CDN**). You do **not** need a portable `python\runtime`.
+**OSSI packages (paramiko, etc.):** `python\wheels\` is in the repo. `install.bat` uses **system Python 3.11+** (prompts you to install if missing) and pip-installs from `python\wheels` (**no PyPI / no CDN**). No bundled `python.exe`.
 
 Do **not** copy `data_live` from another PC unless you want the same monitored trunks. Copy `map\sites.json` only if you already have site pins.
 

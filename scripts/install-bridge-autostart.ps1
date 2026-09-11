@@ -17,14 +17,13 @@ if (-not $Root) { $Root = (Resolve-Path (Join-Path $scriptDir "..")).Path }
 
 $TaskName = "CM-NOC-OSSI-Bridge"
 $Py = Join-Path $Root "python\.venv\Scripts\python.exe"
-if (-not (Test-Path $Py)) { $Py = Join-Path $Root "python\runtime\python.exe" }
 $Script = Join-Path $Root "python\ossi_service.py"
 $DataDir = Join-Path $Root "data_live"
 $WorkDir = Join-Path $Root "python"
 $Port = 18776
 
 if (-not (Test-Path $Py)) {
-    throw "Site Python missing: expected python\.venv or python\runtime — run scripts\install.ps1 first."
+    throw "Site venv missing: python\.venv — run scripts\install.bat first (system Python 3.11+)."
 }
 if (-not (Test-Path $Script)) { throw "Missing $Script" }
 if (-not (Test-Path $DataDir)) { New-Item -ItemType Directory -Force -Path $DataDir | Out-Null }
