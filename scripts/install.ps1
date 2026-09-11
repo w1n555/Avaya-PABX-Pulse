@@ -304,19 +304,11 @@ function Ensure-Python {
         Write-Ok "Python 3.11+ found: $py"
         return
     }
-    Write-Warn "Python 3.11+ not detected (no bundled python\runtime and no system Python)"
+    Write-Warn "Python 3.11+ not detected"
     if (-not $NonInteractive) {
         $ans = Read-Host "Install Python 3.12 now? [Y/n]"
         if ($ans -match '^[nN]') {
-            throw @"
-Python is required for OSSI.
-
-Offline: copy python\runtime from a working Pulse PC (or GitHub Release python-runtime.zip)
-into: $Root\python\runtime
-Then re-run install.bat.
-
-Online: install Python 3.12 from https://www.python.org (Add to PATH) and re-run.
-"@
+            throw "Python 3.11+ is required. Install from https://www.python.org (Add to PATH), then re-run. paramiko installs from python\wheels (no PyPI)."
         }
     }
     Install-Python311
@@ -525,7 +517,7 @@ This PC needs either:
   - internet to PyPI.
 
 You install Python 3.11+ yourself (Add to PATH), then re-run install.bat.
-Do not need a portable python\runtime.
+Packages come from python\wheels\ (offline pip).
 "@
 }
 
