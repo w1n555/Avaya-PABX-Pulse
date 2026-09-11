@@ -789,8 +789,10 @@ function Install-BridgeTask([string]$root, [string]$venvPy) {
 
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
     $exe = $venvPy
-    $pyw = [regex]::Replace([string]$venvPy, 'python\.exe$', 'pythonw.exe')
-    if ($pyw -and (Test-Path $pyw)) { $exe = $pyw }
+    if ($exe -match 'pythonw\.exe$') {
+        $exe2 = [regex]::Replace([string]$exe, 'pythonw\.exe$', 'python.exe')
+        if (Test-Path $exe2) { $exe = $exe2 }
+    }
     $action = New-ScheduledTaskAction -Execute $exe -Argument $arg -WorkingDirectory $work
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $settings = New-ScheduledTaskSettingsSet `
@@ -858,17 +860,12 @@ function Start-BridgeNow([string]$root, [string]$venvPy, [switch]$ForceRestart) 
             return
         }
 
-        # Site venv; pythonw = no console window
         $py = $venvPy
         if (-not $py -or -not (Test-Path $py)) {
             $py = Join-Path $root "python\.venv\Scripts\python.exe"
         }
         if (-not (Test-Path $py)) {
             $py = Find-Python
-        }
-        if ($py) {
-            $pyw = [regex]::Replace($py, 'python\.exe$', 'pythonw.exe')
-            if (Test-Path $pyw) { $py = $pyw }
         }
         if (-not $py -or -not (Test-Path $py)) {
             Write-Warn "No python.exe to start bridge. Login may still start it later."

@@ -16,8 +16,7 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (-not $Root) { $Root = (Resolve-Path (Join-Path $scriptDir "..")).Path }
 
 $TaskName = "CM-NOC-OSSI-Bridge"
-$Py = Join-Path $Root "python\.venv\Scripts\pythonw.exe"
-if (-not (Test-Path $Py)) { $Py = Join-Path $Root "python\.venv\Scripts\python.exe" }
+$Py = Join-Path $Root "python\.venv\Scripts\python.exe"
 $Script = Join-Path $Root "python\ossi_service.py"
 $DataDir = Join-Path $Root "data_live"
 $WorkDir = Join-Path $Root "python"
