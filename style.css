@@ -51,7 +51,7 @@ html[data-theme="light"] {
 html, body { height: 100%; margin: 0; }
 body {
   font-family: var(--font);
-  background: radial-gradient(1200px 600px at 10% -10%, var(--bg-glow) 0%, var(--bg) 55%);
+  background: var(--bg);
   color: var(--text);
   min-height: 100vh;
   transition: background 0.25s ease, color 0.2s ease;
@@ -64,6 +64,7 @@ body {
   max-width: 1680px;
   margin: 0 auto;
   padding: 0 1rem 1rem;
+  background: var(--bg);
 }
 
 .topbar {
@@ -866,11 +867,19 @@ html[data-theme="light"] .ext-num-btn:hover { color: #0e7490; }
 }
 
 .footer {
-  margin-top: 1.25rem;
-  padding: 0.85rem 0;
-  border-top: 1px solid var(--border);
+  margin-top: auto;
+  margin-left: -1rem;
+  margin-right: -1rem;
+  padding: 1em 1rem;
+  background: var(--bg);
   color: var(--muted);
   font-size: 0.78rem;
+}
+.footer::before {
+  content: "";
+  display: block;
+  border-top: 1px solid var(--border);
+  margin: 0 -1rem 1em;
 }
 
 /* Progress bar (CDR scan / calculate) */

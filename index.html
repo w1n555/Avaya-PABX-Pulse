@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Avaya PABX Pulse</title>
   <link rel="icon" href="favicon.png" type="image/png" />
-  <link rel="stylesheet" href="style.css?v=20260826j" />
+  <link rel="stylesheet" href="style.css?v=20260828c" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
   <script>
     // Apply theme before paint (avoid flash)
@@ -81,12 +81,12 @@
               <div class="map-stat-sub">Healthy / Total</div>
             </div>
             <div class="map-stat accent-red">
-              <div class="map-stat-k">Major</div>
+              <div class="map-stat-k">Trunk Major</div>
               <div class="map-stat-v" id="trunk-stat-crit">—</div>
               <div class="map-stat-sub">&gt;90% / FAILED</div>
             </div>
             <div class="map-stat accent-yellow">
-              <div class="map-stat-k">Minor</div>
+              <div class="map-stat-k">Trunk Minor</div>
               <div class="map-stat-v" id="trunk-stat-warn">—</div>
               <div class="map-stat-sub">70–90%</div>
             </div>
@@ -455,11 +455,11 @@
             <div class="map-stat-sub">Online / Total</div>
           </div>
           <div class="map-stat accent-red">
-            <div class="map-stat-k">Major</div>
+            <div class="map-stat-k">Gateway Major</div>
             <div class="map-stat-v" id="gw-stat-mj">—</div>
           </div>
           <div class="map-stat accent-yellow">
-            <div class="map-stat-k">Minor</div>
+            <div class="map-stat-k">Gateway Minor</div>
             <div class="map-stat-v" id="gw-stat-mn">—</div>
           </div>
           <div class="map-stat">
@@ -504,11 +504,11 @@
           </div>
           <div class="map-stat-row gw-detail-kpi-alarms" id="gw-detail-kpi" aria-label="Gateway alarms and ports">
             <div class="map-stat accent-red">
-              <div class="map-stat-k">Major</div>
+              <div class="map-stat-k">Gateway Major</div>
               <div class="map-stat-v" id="gw-dstat-mj">—</div>
             </div>
             <div class="map-stat accent-yellow">
-              <div class="map-stat-k">Minor</div>
+              <div class="map-stat-k">Gateway Minor</div>
               <div class="map-stat-v" id="gw-dstat-mn">—</div>
             </div>
             <div class="map-stat">

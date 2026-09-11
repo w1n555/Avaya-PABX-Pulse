@@ -5,9 +5,13 @@ Your goal (supported):
   1. Install IIS yourself (Windows Features)
   2. Extract this package to ANY folder you choose
      (example only: C:\inetpub\wwwroot\CM — any path is fine)
-  3. Admin PowerShell — go into that folder's scripts\ then:
+  3. Right-click PowerShell → Run as administrator. Then:
 
-       powershell -ExecutionPolicy Bypass -File .\install.ps1
+       cd <YOUR_EXTRACT_FOLDER>\scripts
+       install.bat
+
+     (install.bat bypasses Windows script policy. Same as:
+       powershell -ExecutionPolicy Bypass -File .\install.ps1 )
 
   4. Confirm ROOT path when asked (default = package folder)
   5. Open the URL printed (typical nested install):
@@ -54,7 +58,7 @@ ONE command for new install AND upgrade (auto-detect)
 Always the same:
 
   cd <YOUR_EXTRACT_FOLDER>\scripts
-  powershell -ExecutionPolicy Bypass -File .\install.ps1
+  install.bat
 
 Script detects:
   - git clone?  -> auto git pull from GitHub

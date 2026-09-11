@@ -49,22 +49,31 @@ It does **not** replace Avaya System Manager or SAT for administration. It is th
 
 ## Install
 
-**Need:** Windows IIS (you install IIS), Administrator PowerShell, internet the first time (Hosting Bundle / Python if missing).
+**Need:** Windows IIS (you install IIS), **Administrator**, internet the first time (Hosting Bundle / Python if missing).
 
-```powershell
-cd <extract>\scripts
-powershell -ExecutionPolicy Bypass -File .\install.ps1
+**Get the files** (pick one):
+
+- `git clone https://github.com/w1n555/Avaya-PABX-Network-Monitoring-for-NOC.git` then copy/move into e.g. `C:\inetpub\wwwroot\CM`  
+- Or GitHub → **Releases** → download Source zip → extract to e.g. `C:\inetpub\wwwroot\CM`
+
+Do **not** copy `python\.venv` or `data_live` from another PC (install creates them). Copy `map\sites.json` only if you already have site pins.
+
+```bat
+cd C:\inetpub\wwwroot\CM\scripts
+install.bat
 ```
 
+`install.bat` runs as Admin and bypasses Windows “running scripts is disabled”. Same as `powershell -ExecutionPolicy Bypass -File .\install.ps1`.
+
 1. Install **IIS** (Windows Features) yourself.  
-2. Extract this package to any folder (example: `C:\inetpub\wwwroot\CM`).  
-3. Run `install.ps1` as Admin. Confirm the package root when asked.  
+2. Put the app in a **subfolder** of the existing site (example: `C:\inetpub\wwwroot\CM`).  
+3. Run `install.bat` as Admin. Confirm the package root; IIS port default **8888**.  
 4. Open the URL it prints, typically `http://127.0.0.1:8888/CM/`.  
 5. Enter **your** CM Host + RO user + password → **Login**.
 
 The script does **not** install IIS and does **not** replace the parent site homepage. Nested mode only adds `/CM` and `/CM/api` on the existing IIS site/port.
 
-Same command **upgrades** an existing install (`git pull` if `.git` is present) and **keeps** the monitored trunk list.
+Same command **upgrades** an existing install (`git pull` if `.git` is present) and **keeps** the monitored trunk list (`data_live\monitored_trunks.json`).
 
 Optional flags: `-SkipDotNetInstall`, `-SkipPythonInstall`, `-SkipUpdate`, `-NonInteractive -RootPath "C:\path" -SitePort 8888`.  
 Dedicated site on a free port: `-IisMode Dedicated -SitePort 8890`.  
@@ -122,7 +131,7 @@ vendor/avaya-ossi/                      SSH / OSSI client
 cdr-link/                               CDR logger
 api/                                    published CmApi
 data_live/                              runtime JSON (not in git)
-scripts/install.ps1
+scripts/install.bat   scripts/install.ps1
 ```
 
 ---
