@@ -1,4 +1,4 @@
-# Single-port OSSI bridge restart — MUST match api\appsettings.json (18776 only).
+# Single-port OSSI bridge restart - MUST match api\appsettings.json (18776 only).
 # Prefer Admin when killing zombies / recycling IIS.
 $log = "C:\inetpub\wwwroot\CM\data_live\logs\restart-bridge.log"
 New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
@@ -56,4 +56,4 @@ try {
   $r = Invoke-RestMethod "http://127.0.0.1:$PORT/monitored" -TimeoutSec 5
   L ("monitored keys=" + ($r.PSObject.Properties.Name -join ','))
 } catch { L "monitored err $_" }
-L "restart end — ONLY port $PORT"
+L "restart end - ONLY port $PORT"

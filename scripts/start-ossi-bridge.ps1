@@ -1,4 +1,4 @@
-# Start local OSSI bridge (127.0.0.1:18776 ONLY) — match api\appsettings.json.
+# Start local OSSI bridge (127.0.0.1:18776 ONLY) - match api\appsettings.json.
 # Prefer: install.ps1 (auto). This script is for manual troubleshooting only.
 
 param(

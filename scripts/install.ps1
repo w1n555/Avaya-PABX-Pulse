@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
   One-click IIS setup for Avaya PABX Pulse (easy path).
@@ -49,7 +49,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Single OSSI bridge — MUST match live api\appsettings.json
+# Single OSSI bridge - MUST match live api\appsettings.json
 $script:OssiBridgePort = 18776
 $script:OssiBridgeLegacyPort = 18765  # kill leftover only; never start
 $script:OssiDataLeaf = "data_live"
@@ -614,7 +614,7 @@ function Find-SiteByPhysicalPath([string]$path) {
 }
 
 function Remove-DedicatedCmNocSiteIfConflicting([int]$port) {
-    # Older install.ps1 created a dedicated "CM-NOC" site on the same port as other apps — remove it
+    # Older install.ps1 created a dedicated "CM-NOC" site on the same port as other apps - remove it
     $appcmd = Get-AppCmd
     $sites = @(& $appcmd list site /text:SITE.NAME 2>$null)
     if ($sites -notcontains "CM-NOC") { return }
@@ -666,7 +666,7 @@ function Set-IisNested([string]$root, [int]$port, [string]$alias) {
         throw "Could not find an IIS site on port $port. Nested mode only adds /CM under an existing site. Pass -ParentSiteName or use -IisMode Dedicated -SitePort 8890 on a free port."
     }
 
-    # SAFETY: snapshot parent root path BEFORE we touch anything — must be unchanged after
+    # SAFETY: snapshot parent root path BEFORE we touch anything - must be unchanged after
     $parentRootBefore = Get-SiteRootPhysicalPath -siteName $parent
     Write-Info "Parent site: $parent (port $port)"
     Write-Info "Parent ROOT path (will NOT be changed): $parentRootBefore"
@@ -719,7 +719,7 @@ function Set-IisNested([string]$root, [int]$port, [string]$alias) {
 }
 
 function Set-IisDedicated([string]$root, [int]$port) {
-    # ONLY with explicit -IisMode Dedicated — owns a whole port (not for shared servers)
+    # ONLY with explicit -IisMode Dedicated - owns a whole port (not for shared servers)
     Write-Warn "Dedicated mode: will create/use a FULL site on port $port (not parasite)."
     Write-Warn "If port already has another product, use Nested mode instead."
     $appcmd = Get-AppCmd
@@ -838,7 +838,7 @@ function Stop-BridgeOnPort([int]$port = 0) {
 }
 
 function Start-BridgeNow([string]$root, [string]$venvPy, [switch]$ForceRestart) {
-    # Never fail the whole install if bridge start has issues — Login can retry.
+    # Never fail the whole install if bridge start has issues - Login can retry.
     try {
         if ($ForceRestart) {
             Write-Info "Restarting OSSI bridge..."
@@ -1035,7 +1035,7 @@ function Restart-AppPool {
     try {
         $p = Start-Process -FilePath $appcmd -ArgumentList @("stop", "apppool", "/apppool.name:$AppPoolName") -PassThru -WindowStyle Hidden
         if ($p -and -not $p.WaitForExit(12000)) {
-            Write-Warn "apppool stop timed out — not waiting (website may still drain)"
+            Write-Warn "apppool stop timed out - not waiting (website may still drain)"
         } else {
             Start-Sleep -Seconds 1
         }

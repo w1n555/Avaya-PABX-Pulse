@@ -23,7 +23,7 @@ $WorkDir = Join-Path $Root "python"
 $Port = 18776
 
 if (-not (Test-Path $Py)) {
-    throw "Site venv missing: python\.venv — run scripts\install.bat first (system Python 3.11+)."
+    throw "Site venv missing: python\.venv - run scripts\install.bat first (system Python 3.11+)."
 }
 if (-not (Test-Path $Script)) { throw "Missing $Script" }
 if (-not (Test-Path $DataDir)) { New-Item -ItemType Directory -Force -Path $DataDir | Out-Null }
@@ -40,7 +40,7 @@ Start-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
 try {
     $r = Invoke-WebRequest "http://127.0.0.1:$Port/health" -UseBasicParsing -TimeoutSec 5
-    Write-Host "OK: bridge healthy port=$Port — $($r.Content)"
+    Write-Host "OK: bridge healthy port=$Port - $($r.Content)"
 } catch {
     Write-Warning "Task registered but health not yet OK: $_"
 }
