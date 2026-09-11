@@ -206,7 +206,6 @@ function Find-Python {
     $cands = @()
     if ($Root) {
         $cands += (Join-Path $Root "python\runtime\python.exe")
-        $cands += (Join-Path $Root "python\.venv\Scripts\python.exe")
     }
     $cands += @(
         (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313\python.exe"),
@@ -438,8 +437,13 @@ function Test-AvayaOssiImport([string]$py, [string]$root) {
     $prev = $env:PYTHONPATH
     try {
         $env:PYTHONPATH = $src
-        $null = & $py -c "import avaya_ossi, paramiko" 2>&1
-        return ($LASTEXITCODE -eq 0)
+        $p = Start-Process -FilePath $py -ArgumentList @('-c', 'import avaya_ossi, paramiko') -Wait:$false -PassThru -WindowStyle Hidden
+        if (-not $p.WaitForExit(20000)) {
+            try { $p.Kill() } catch {}
+            Write-Warn "python import timed out (20s): $py"
+            return $false
+        }
+        return ($p.ExitCode -eq 0)
     } catch {
         return $false
     } finally {
@@ -452,8 +456,8 @@ function Repair-VenvHome([string]$root, [string]$basePython) {
     if (-not (Test-Path $cfg)) { return }
     $pyHome = $null
     $runtimePy = Join-Path $root "python\runtime\python.exe"
-    if (Test-Path $runtimePy) { $pyHome = Split-Path $runtimePy }
-    elseif ($basePython -and (Test-Path $basePython)) { $pyHome = Split-Path $basePython }
+    if ($basePython -and (Test-Path $basePython)) { $pyHome = Split-Path $basePython }
+    elseif (Test-Path $runtimePy) { $pyHome = Split-Path $runtimePy }
     if (-not $pyHome) { return }
     $lines = Get-Content $cfg
     $out = foreach ($line in $lines) {
@@ -480,13 +484,14 @@ function Ensure-PythonVenv([string]$root, [string]$basePython) {
         if ($LASTEXITCODE -ne 0) { throw 'python -m venv failed' }
     }
     Repair-VenvHome -root $root -basePython $basePython
+    Write-Info "Checking venv import: $venvPy"
     if (Test-AvayaOssiImport -py $venvPy -root $root) {
         Write-Ok "Python OSSI ready (existing venv): $venvPy"
         return ,$venvPy
     }
     $wheelDir = Join-Path $root 'python\wheels'
     if (Test-Path $wheelDir) {
-        Write-Info 'Installing paramiko from python\wheels (offline, no PyPI)...'
+        Write-Info 'Installing paramiko from python\wheels (offline, no PyPI, ~1 min)...'
         try {
             & $venvPy -m pip install --no-index --find-links $wheelDir setuptools wheel paramiko python-dotenv
             & $venvPy -m pip install --no-index --no-build-isolation --find-links $wheelDir -e $vendor
@@ -1069,8 +1074,10 @@ try {
 
     $basePy = Find-Python -Root $root
     if (-not $basePy) { throw "Python still not found after install step." }
-    Write-Ok "Python: $basePy"
+    Write-Ok "System Python: $basePy"
+    Write-Info "Preparing site venv (python\.venv) from that interpreter..."
     $venvPy = Ensure-PythonVenv -root $root -basePython $basePy
+    Write-Ok "Bridge will run: $venvPy"
 
     # Always Force publish on re-run so one command upgrades C# too
     Ensure-ApiPublish -root $root -Force
