@@ -425,6 +425,37 @@ function Ensure-DataFiles([string]$root) {
     New-Item -ItemType Directory -Force -Path (Join-Path $data "logs") | Out-Null
 }
 
+function Test-AvayaOssiImport([string]$py, [string]$root) {
+    if (-not $py -or -not (Test-Path $py)) { return $false }
+    $src = Join-Path $root "vendor\avaya-ossi\src"
+    $prev = $env:PYTHONPATH
+    try {
+        $env:PYTHONPATH = $src
+        $null = & $py -c "import avaya_ossi, paramiko" 2>&1
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    } finally {
+        $env:PYTHONPATH = $prev
+    }
+}
+
+function Repair-VenvHome([string]$root, [string]$basePython) {
+    $cfg = Join-Path $root "python\.venv\pyvenv.cfg"
+    if (-not (Test-Path $cfg)) { return }
+    $home = $null
+    $runtimePy = Join-Path $root "python\runtime\python.exe"
+    if (Test-Path $runtimePy) { $home = Split-Path $runtimePy }
+    elseif ($basePython -and (Test-Path $basePython)) { $home = Split-Path $basePython }
+    if (-not $home) { return }
+    $lines = Get-Content $cfg
+    $out = foreach ($line in $lines) {
+        if ($line -match '^\s*home\s*=') { "home = $home" }
+        else { $line }
+    }
+    Set-Content -Path $cfg -Value $out -Encoding ASCII
+}
+
 function Ensure-PythonVenv([string]$root, [string]$basePython) {
     $venvPy = Join-Path $root "python\.venv\Scripts\python.exe"
     $vendor = Join-Path $root "vendor\avaya-ossi"
@@ -432,23 +463,39 @@ function Ensure-PythonVenv([string]$root, [string]$basePython) {
         throw "Missing vendor\avaya-ossi - ZIP incomplete. Re-download full package."
     }
     if (-not (Test-Path $venvPy)) {
-        Write-Info "Creating Python venv under site (first time, may take ~1 min)..."
+        Write-Info "Creating Python venv under site (first time)..."
         & $basePython -m venv (Join-Path $root "python\.venv")
         if ($LASTEXITCODE -ne 0) { throw "python -m venv failed" }
+    }
+    Repair-VenvHome -root $root -basePython $basePython
+    if (Test-AvayaOssiImport -py $venvPy -root $root) {
+        Write-Ok "Python OSSI ready (offline / existing venv): $venvPy"
+        return ,$venvPy
+    }
+    Write-Info "Installing avaya-ossi + paramiko into site venv (needs internet once)..."
+    $pipOk = $false
+    try {
         & $venvPy -m pip install -U pip -q
         & $venvPy -m pip install -e $vendor -q
-        if ($LASTEXITCODE -ne 0) { throw "pip install avaya-ossi failed" }
-    } else {
-        Write-Info "Refreshing avaya-ossi in site venv..."
-        & $venvPy -m pip install -e $vendor -q
+        if ($LASTEXITCODE -eq 0) { $pipOk = $true }
+    } catch {
+        Write-Warn "pip install failed: $($_.Exception.Message)"
     }
-    # IMPORTANT: capture/discard output — in PowerShell, uncaptured stdout becomes function return value
-    $null = & $venvPy -c "import avaya_ossi; print(avaya_ossi.__version__)" 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "avaya_ossi import failed in site venv" }
-    if (-not (Test-Path $venvPy)) { throw "venv python missing: $venvPy" }
-    Write-Ok "Python OSSI ready: $venvPy"
-    # Return only the path string (never mixed with pip/version output)
-    return ,$venvPy
+    if (Test-AvayaOssiImport -py $venvPy -root $root) {
+        Write-Ok "Python OSSI ready: $venvPy"
+        return ,$venvPy
+    }
+    throw @"
+Python venv has no avaya-ossi/paramiko and this PC cannot reach PyPI (no CDN/internet).
+
+USB-copy from a working Pulse PC (same folder names):
+  python\runtime     (~60 MB)   AND
+  python\.venv       (~30 MB)
+into:
+  $root\python\
+
+Then re-run install.bat. Do not pip on this machine.
+"@
 }
 
 function Ensure-ApiPublish([string]$root, [switch]$Force) {
