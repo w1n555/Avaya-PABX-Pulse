@@ -351,11 +351,21 @@ function Read-Port([int]$defaultPort) {
     return $n
 }
 
+function Test-DotNetSdk([string]$dotnet) {
+    if (-not $dotnet) { return $false }
+    $sdks = & $dotnet --list-sdks 2>$null
+    return [bool]($sdks | Where-Object { $_ -match '\d+\.\d+' })
+}
+
 function Find-DotNet {
-    $local = Join-Path $env:LOCALAPPDATA "Microsoft\dotnet\dotnet.exe"
-    if (Test-Path $local) { return $local }
+    $cands = @(
+        (Join-Path $env:LOCALAPPDATA "Microsoft\dotnet\dotnet.exe")
+    )
     $cmd = Get-Command dotnet -ErrorAction SilentlyContinue
-    if ($cmd) { return $cmd.Source }
+    if ($cmd) { $cands += $cmd.Source }
+    foreach ($c in $cands) {
+        if ($c -and (Test-Path $c) -and (Test-DotNetSdk $c)) { return $c }
+    }
     return $null
 }
 
@@ -525,10 +535,10 @@ function Ensure-ApiPublish([string]$root, [switch]$Force) {
     $dotnet = Find-DotNet
     if (-not $dotnet) {
         if (Test-Path $apiDll) {
-            Write-Warn 'dotnet SDK not found; using existing api folder'
+            Write-Ok 'No .NET SDK (Hosting Bundle is enough) - using prebuilt api\CmApi.dll'
             return
         }
-        throw 'dotnet not found. Install .NET 8 SDK (or ship prebuilt api).'
+        throw 'Need api\CmApi.dll from the Pulse zip, or install .NET 8 SDK to publish.'
     }
     Write-Info "Publishing CmApi..."
     $out = Join-Path $root "api"
@@ -536,7 +546,13 @@ function Ensure-ApiPublish([string]$root, [switch]$Force) {
     try { & $appcmd stop apppool /apppool.name:"$AppPoolName" 2>$null | Out-Null } catch {}
     Start-Sleep -Seconds 1
     & $dotnet publish $csproj -c Release -o $out --nologo
-    if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
+    if ($LASTEXITCODE -ne 0) {
+        if (Test-Path $apiDll) {
+            Write-Warn 'dotnet publish failed; using existing api\CmApi.dll'
+            return
+        }
+        throw 'dotnet publish failed'
+    }
     Write-Ok "Published to $out"
 }
 
