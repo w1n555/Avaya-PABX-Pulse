@@ -793,7 +793,13 @@ function Install-BridgeTask([string]$root, [string]$venvPy) {
         $exe2 = [regex]::Replace([string]$exe, 'pythonw\.exe$', 'python.exe')
         if (Test-Path $exe2) { $exe = $exe2 }
     }
-    $action = New-ScheduledTaskAction -Execute $exe -Argument $arg -WorkingDirectory $work
+    $vbs = Join-Path $root "scripts\run-hidden.vbs"
+    $src = Join-Path $root "vendor\avaya-ossi\src"
+    if (Test-Path $vbs) {
+        $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "//nologo `"$vbs`" `"$exe`" `"$script`" 0.0.0.0 $($script:OssiBridgePort) `"$data`" `"$src`"" -WorkingDirectory $work
+    } else {
+        $action = New-ScheduledTaskAction -Execute $exe -Argument $arg -WorkingDirectory $work
+    }
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $settings = New-ScheduledTaskSettingsSet `
         -AllowStartIfOnBatteries `
@@ -801,7 +807,8 @@ function Install-BridgeTask([string]$root, [string]$venvPy) {
         -RestartCount 5 `
         -RestartInterval (New-TimeSpan -Minutes 1) `
         -ExecutionTimeLimit ([TimeSpan]::Zero) `
-        -StartWhenAvailable
+        -StartWhenAvailable `
+        -Hidden
     $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
     try { Start-ScheduledTask -TaskName $TaskName } catch { Write-Warn "Task start: $_" }
@@ -872,13 +879,14 @@ function Start-BridgeNow([string]$root, [string]$venvPy, [switch]$ForceRestart) 
             return
         }
 
-        Write-Info "Starting bridge: $py"
-        $arg = "`"$script`" --host 0.0.0.0 --port $($script:OssiBridgePort) --data-dir `"$data`""
-        # Use cmd start so short-lived wrappers / venv stubs work on more machines
-        $cmd = "start `"`" /B `"$py`" $arg"
-        $p = Start-Process -FilePath "$env:ComSpec" -ArgumentList @("/c", $cmd) -WorkingDirectory $work -WindowStyle Hidden -PassThru -ErrorAction SilentlyContinue
-        if (-not $p) {
-            # Fallback: direct Start-Process
+        Write-Info "Starting bridge (hidden): $py"
+        $vbs = Join-Path $root "scripts\run-hidden.vbs"
+        $src = Join-Path $root "vendor\avaya-ossi\src"
+        if (Test-Path $vbs) {
+            Start-Process -FilePath "wscript.exe" -ArgumentList @(
+                "//nologo", $vbs, $py, $script, "0.0.0.0", "$($script:OssiBridgePort)", $data, $src
+            ) -WindowStyle Hidden -ErrorAction SilentlyContinue | Out-Null
+        } else {
             Start-Process -FilePath $py -ArgumentList @(
                 $script, "--host", "0.0.0.0", "--port", "$($script:OssiBridgePort)", "--data-dir", $data
             ) -WorkingDirectory $work -WindowStyle Hidden -ErrorAction SilentlyContinue | Out-Null

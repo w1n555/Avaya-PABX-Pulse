@@ -36,8 +36,8 @@ if not errorlevel 1 (
 REM Drop stale locks from crashed instances
 if exist "%DATA%\ossi_bridge_%PORT%.lock" del /f /q "%DATA%\ossi_bridge_%PORT%.lock" >nul 2>&1
 
-REM start: first quoted token is window title
-start "CM-OSSI-Bridge" /B "%PY%" "%SITE%\python\ossi_service.py" --host 0.0.0.0 --port %PORT% --data-dir "%DATA%"
+REM Hidden python.exe (not pythonw). WScript window style 0 = no black console.
+wscript.exe //nologo "%SITE%\scripts\run-hidden.vbs" "%PY%" "%SITE%\python\ossi_service.py" 0.0.0.0 %PORT% "%DATA%" "%PYTHONPATH%"
 endlocal
 exit /b 0
 
