@@ -49,7 +49,7 @@ It does **not** replace Avaya System Manager or SAT for administration. It is th
 
 ## Install
 
-**You install yourself:** Windows **IIS**, **.NET 8 Hosting Bundle**, **Python 3.11 or 3.12** (Add to PATH). Then Admin `install.bat`.
+**You install yourself:** Windows **IIS**, **.NET 8 Hosting Bundle** (not the SDK), **Python 3.11 or 3.12** (Add to PATH). `install.bat` checks those three; if one is missing it tells you to install and re-run. Everything else is one-click.
 
 **Get the files** (pick one):
 

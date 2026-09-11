@@ -3,16 +3,9 @@
 .SYNOPSIS
   One-click IIS setup for Avaya PABX Pulse (easy path).
 
-  User installs IIS themselves. This script:
-    1) Detects IIS
-    2) Checks / installs .NET 8 Hosting Bundle if missing
-    3) Checks / installs Python 3.12 (with PATH) if missing
-    4) Asks local ROOT path (ZIP extract folder)
-    5) Points IIS site + /api to that path
-    6) OPTIONAL: pull latest code from GitHub if folder is a git repo (or -Update)
-    7) Site venv + bundled vendor/avaya-ossi + bridge autostart
-    8) Re-publish API, recycle pool, restart bridge
-    9) Prints browser URL
+  You install IIS, .NET 8 Hosting Bundle, and Python 3.11+ yourself.
+  If any of those is missing, this script prints a message and stops.
+  Then it one-click: nested /CM, venv + python\wheels, prebuilt api\CmApi.dll, hidden OSSI bridge.
 
   ONE command for both first install AND upgrade (auto-detect):
     powershell -ExecutionPolicy Bypass -File .\install.ps1
@@ -190,14 +183,7 @@ function Ensure-DotNetHosting {
         Write-Ok ".NET ASP.NET Core Hosting / ANCM present"
         return
     }
-    Write-Warn ".NET 8 Hosting Bundle not detected"
-    if (-not $NonInteractive) {
-        $ans = Read-Host "Install .NET 8 Hosting Bundle now? [Y/n]"
-        if ($ans -match '^[nN]') {
-            throw "Hosting Bundle is required for /api. Install from https://dotnet.microsoft.com/download/dotnet/8.0 and re-run."
-        }
-    }
-    Install-DotNetHostingBundle
+    throw "Missing .NET 8 Hosting Bundle. Install it, then re-run install.bat. https://dotnet.microsoft.com/download/dotnet/8.0 (Hosting Bundle, not the SDK)"
 }
 
 function Find-Python {
@@ -299,14 +285,7 @@ function Ensure-Python {
         Write-Ok "Python 3.11+ found: $py"
         return
     }
-    Write-Warn "Python 3.11+ not detected"
-    if (-not $NonInteractive) {
-        $ans = Read-Host "Install Python 3.12 now? [Y/n]"
-        if ($ans -match '^[nN]') {
-            throw "Python 3.11 or 3.12 is required. Install from https://www.python.org (tick Add to PATH), then re-run install.bat. Packages come from python\wheels."
-        }
-    }
-    Install-Python311
+    throw "Missing Python 3.11 or 3.12. Install from https://www.python.org (tick Add python.exe to PATH), then re-run install.bat."
 }
 
 function Read-UserPath([string]$defaultPath) {
@@ -521,8 +500,8 @@ function Ensure-PythonVenv([string]$root, [string]$basePython) {
 function Ensure-ApiPublish([string]$root, [switch]$Force) {
     $apiDll = Join-Path $root 'api\CmApi.dll'
     $csproj = Join-Path $root 'src\CmApi\CmApi.csproj'
-    if ((Test-Path $apiDll) -and $SkipPublish -and -not $Force) {
-        Write-Ok 'Using existing api publish'
+    if ((Test-Path $apiDll) -and -not $Force) {
+        Write-Ok 'Using prebuilt api\CmApi.dll'
         return
     }
     if (-not (Test-Path $csproj)) {
@@ -1103,8 +1082,7 @@ try {
     $venvPy = Ensure-PythonVenv -root $root -basePython $basePy
     Write-Ok "Bridge will run: $venvPy"
 
-    # Always Force publish on re-run so one command upgrades C# too
-    Ensure-ApiPublish -root $root -Force
+    Ensure-ApiPublish -root $root
     Set-JsonAppSettings -root $root -pythonExe $venvPy
     $urlPrefix = Set-IisSite -root $root -port $port
     if ($null -eq $urlPrefix) { $urlPrefix = "" }
