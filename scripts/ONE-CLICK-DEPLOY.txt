@@ -1,6 +1,0 @@
-Deprecated — Avaya PABX Pulse uses install.ps1 (portable, any machine).
-
-  cd <YOUR_EXTRACT_FOLDER>\scripts
-  powershell -ExecutionPolicy Bypass -File .\install.ps1
-
-See INSTALL.txt and README.md.

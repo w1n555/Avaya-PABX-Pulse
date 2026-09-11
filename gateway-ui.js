@@ -1,7 +1,6 @@
 /**
- * Media Gateway status — OSSI list media-gateway + Active alarm counts by MG Port.
- * First open / manual Refresh → progress popup %.
- * Session Auto 60s (Trunk checkbox) packs Trunk + Alarm + Gateway.
+ * Media Gateway status — OSSI list media-gateway + alarm counts by MG Port.
+ * Login + Auto 90s pack refresh the list. Click hostname → list configuration (queued).
  */
 
 import { apiUrl, siteUrl, fetchJson, escapeHtml, fmtUpdated } from "./http.js?v=20260827d";

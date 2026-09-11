@@ -1,24 +1,20 @@
 #!/usr/bin/env python3
 """
-Local OSSI bridge for Avaya NOC dashboard (read-only).
+OSSI bridge for Avaya PABX Pulse (read-only list/display/status).
 
-Uses installable package: avaya-ossi (AVAYA-OSSI-2026).
-Listens on 127.0.0.1 only. Does not expose CM to the LAN.
+Package: vendor/avaya-ossi (AVAYA-OSSI-2026).
+Default bind 0.0.0.0:18776, data dir data_live/. One SSH session, one lock.
+Password stays in process memory only.
 
-Endpoints (JSON):
-  GET  /health
-  GET  /session
-  POST /session/connect   {host,port,username,password,pin?}
-  POST /session/disconnect
-  POST /refresh           optional {force:true}
-  GET  /monitored
-  PUT  /monitored         {trunks:[1,2,3]}
-  POST /monitored/add     {tg:1}
-  POST /monitored/remove  {tg:1}
+Main JSON routes (CmApi proxies these):
+  GET/POST  /health  /session  /session/connect  /session/disconnect
+  POST /refresh  /refresh/one {tg}   — real trunk groups only
+  POST /alarms/refresh  /gateways/refresh  /extensions/refresh
+  POST /gateways/config  /extensions/detail
+  GET  /alarms  /gateways  /extensions  /trunk-data  /monitored
 
-Writes:
-  <data-dir>/trunk_data.json
-  <data-dir>/monitored_trunks.json
+Writes under data-dir: trunk_data.json, monitored_trunks.json,
+alarms.json, gateways.json, extensions.json, OSSI dumps.
 """
 
 from __future__ import annotations
@@ -2178,7 +2174,7 @@ class Handler(BaseHTTPRequestHandler):
                 if cm and cm.get("systemTime"):
                     data["systemTime"] = cm.get("systemTime")
                     data["cmTime"] = cm
-                # Piggyback alarms / gateways (old CmApi may lack those routes)
+                # Include alarm / gateway / extension snapshots on trunk-data for one GET
                 try:
                     data["alarms"] = alarms_public()
                 except Exception:

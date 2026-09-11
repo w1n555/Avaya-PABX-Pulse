@@ -131,7 +131,7 @@ vendor/avaya-ossi/                      SSH / OSSI client
 cdr-link/                               CDR logger
 api/                                    published CmApi
 data_live/                              runtime JSON (not in git)
-scripts/install.bat   scripts/install.ps1
+scripts/install.bat   scripts/install.ps1   (upgrade = same bat)
 ```
 
 ---

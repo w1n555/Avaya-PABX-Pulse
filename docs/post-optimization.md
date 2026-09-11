@@ -135,7 +135,7 @@ Git tracked a second full UI under `web/`. Hashes matched the root files. The br
 ### What we did
 
 1. Confirmed live does not read `web/`: IIS `web.config` default document is root `index.html`; `install.ps1` never copies `web/`.
-2. Retired `scripts/one-click-deploy.ps1` to a stub that tells you to run `install.ps1` (exit 1). The old script copied `web\*` onto the site root and **threw if `web` was missing**.
+2. Retired then **deleted** `scripts/one-click-deploy.ps1` (it copied `web\*` and threw if `web` was missing). Use `scripts/install.bat`.
 3. `git rm -r web/` — UI js/html/css, duplicate `logo.png` / `favicon.png`, duplicate `vendor/leaflet`, `web/README.md`, `web/map/sites.json`.
 4. Left the **root** UI in place (moving it into `web/` would 404 IIS).
 
@@ -147,7 +147,7 @@ Root is the only source of truth.
 - `web/` folder gone.
 - Bridge `http://127.0.0.1:18776/health` still `ossi-bridge` / connected (no recycle).
 - HTTP GET site `/CM/` and `/CM/app.js` / `/CM/style.css` still 200 from the root files.
-- `scripts/one-click-deploy.ps1` no longer references a `web` folder.
+- `scripts/one-click-deploy.ps1` removed (use `install.bat`).
 
 **Git:** ~9.3k UI lines + leaflet/README removed from the repo. **Live dashboard:** same files as before.
 

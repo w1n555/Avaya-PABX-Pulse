@@ -1,6 +1,8 @@
 /**
- * Avaya NOC UI — Trunk (OSSI) + CDR tab (mock UI for now)
- * OSSI via /CM/api · trunk_data.json + monitored_trunks.json
+ * Avaya PABX Pulse — browser UI (ES modules, no build).
+ * Tabs: Map, Trunk, Gateway, Extension, CDR, Alarm.
+ * Live OSSI via /CM/api (queued). Auto pack every 90s while logged in.
+ * F5 keeps the session. CDR reads files only (not OSSI).
  */
 
 import { apiUrl, fetchJson, escapeHtml } from "./http.js?v=20260827d";
@@ -2426,7 +2428,7 @@ function bindTabs() {
         /* ignore */
       }
       if (name === "cdr") {
-        // CDR: no OSSI Auto 60s
+        // CDR: files only — not in the 90s OSSI pack
         try {
           onCdrTabShow();
         } catch {
@@ -2480,7 +2482,7 @@ function bindTabs() {
         setMapTabActive(false);
         paintCountdown();
       } else if (name === "trunk") {
-        // Show last cache only — no popup / no extra OSSI. Auto 60s will refresh.
+        // Show last cache only — no popup / no extra OSSI. Auto 90s will refresh.
         setAlarmTabActive(false);
         setGatewayTabActive(false);
         setExtensionTabActive(false);

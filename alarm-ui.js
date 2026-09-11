@@ -1,8 +1,7 @@
 /**
- * Active Alarms only — OSSI display alarms (SAT default Active=y).
- * First open / manual Refresh → progress popup %.
- * Session Auto 60s (Trunk checkbox) packs Trunk + Active Alarm so flash works on Trunk tab.
- * Ack = stop webpage flash only (NOT CM clear).
+ * Active Alarms — OSSI display alarms (Active=y).
+ * Login + Auto 90s pack refresh this tab. Ack = webpage flash only (not CM clear).
+ * WARNING does not flash. Flash Yellow/Red buttons are demo-only.
  */
 
 import { apiUrl, siteUrl, fetchJson, escapeHtml, fmtUpdated } from "./http.js?v=20260827d";
