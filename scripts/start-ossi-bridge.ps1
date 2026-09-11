@@ -47,6 +47,8 @@ try {
     }
 } catch { }
 
+$pyw = [regex]::Replace($py, 'python\.exe$', 'pythonw.exe')
+if (Test-Path $pyw) { $py = $pyw }
 Write-Host "Starting OSSI bridge with $py ..."
 $argList = @($Script, "--host", "0.0.0.0", "--port", "$Port", "--data-dir", $DataDir)
 Start-Process -FilePath $py -ArgumentList $argList -WorkingDirectory $WorkDir -WindowStyle Hidden

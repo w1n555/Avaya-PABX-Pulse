@@ -20,7 +20,8 @@ Start-Sleep 3
 
 $env:PYTHONPATH = "C:\inetpub\wwwroot\CM\vendor\avaya-ossi\src"
 $env:PYTHONUNBUFFERED = "1"
-$py = "C:\inetpub\wwwroot\CM\python\.venv\Scripts\python.exe"
+$py = "C:\inetpub\wwwroot\CM\python\.venv\Scripts\pythonw.exe"
+if (-not (Test-Path $py)) { $py = "C:\inetpub\wwwroot\CM\python\.venv\Scripts\python.exe" }
 if (-not (Test-Path $py)) { throw "python\.venv missing. Run scripts\install.bat (system Python 3.11+)." }
 
 # Keep appsettings on the single port

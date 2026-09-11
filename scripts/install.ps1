@@ -769,7 +769,10 @@ function Install-BridgeTask([string]$root, [string]$venvPy) {
     $arg = "`"$script`" --host 0.0.0.0 --port $($script:OssiBridgePort) --data-dir `"$data`""
 
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-    $action = New-ScheduledTaskAction -Execute $venvPy -Argument $arg -WorkingDirectory $work
+    $exe = $venvPy
+    $pyw = [regex]::Replace([string]$venvPy, 'python\.exe$', 'pythonw.exe')
+    if ($pyw -and (Test-Path $pyw)) { $exe = $pyw }
+    $action = New-ScheduledTaskAction -Execute $exe -Argument $arg -WorkingDirectory $work
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $settings = New-ScheduledTaskSettingsSet `
         -AllowStartIfOnBatteries `
@@ -836,13 +839,17 @@ function Start-BridgeNow([string]$root, [string]$venvPy, [switch]$ForceRestart) 
             return
         }
 
-        # Resolve a runnable python (site venv preferred)
+        # Site venv; pythonw = no console window
         $py = $venvPy
         if (-not $py -or -not (Test-Path $py)) {
             $py = Join-Path $root "python\.venv\Scripts\python.exe"
         }
         if (-not (Test-Path $py)) {
             $py = Find-Python
+        }
+        if ($py) {
+            $pyw = [regex]::Replace($py, 'python\.exe$', 'pythonw.exe')
+            if (Test-Path $pyw) { $py = $pyw }
         }
         if (-not $py -or -not (Test-Path $py)) {
             Write-Warn "No python.exe to start bridge. Login may still start it later."

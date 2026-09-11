@@ -11,7 +11,8 @@ if not "%~1"=="" set "PORT=%~1"
 set "BIND=0.0.0.0"
 if not "%~2"=="" set "BIND=%~2"
 
-set "PY=%SITE%\python\.venv\Scripts\python.exe"
+set "PY=%SITE%\python\.venv\Scripts\pythonw.exe"
+if not exist "%PY%" set "PY=%SITE%\python\.venv\Scripts\python.exe"
 if not exist "%PY%" set "PY=python"
 
 netstat -ano | findstr /C:":%PORT% " >nul

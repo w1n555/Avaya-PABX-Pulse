@@ -5,8 +5,9 @@ set "SITE=C:\inetpub\wwwroot\CM"
 set "PYTHONPATH=%SITE%\vendor\avaya-ossi\src"
 set "PYTHONUNBUFFERED=1"
 
-REM Site venv (created by install.bat from system Python)
-set "PY=%SITE%\python\.venv\Scripts\python.exe"
+REM Site venv (created by install.bat from system Python). pythonw = no console.
+set "PY=%SITE%\python\.venv\Scripts\pythonw.exe"
+if not exist "%PY%" set "PY=%SITE%\python\.venv\Scripts\python.exe"
 if not exist "%PY%" (
   echo ERROR: No site venv. Run scripts\install.bat first (uses system Python 3.11+).
   exit /b 1
