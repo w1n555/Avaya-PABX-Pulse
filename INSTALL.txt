@@ -38,6 +38,11 @@ What install.ps1 does:
 
   Optional: -IisMode Dedicated -SitePort 8890  (full site on a FREE port only)
 
+Python (offline / no CDN):
+  GitHub Release asset python-runtime.zip
+  Extract so you have:  <ROOT>\python\runtime\python.exe
+  Then install.bat will NOT ask to install Python 3.12.
+
 You do NOT need a separate OSSI repo clone.
 You do NOT need to start the bridge manually every day.
 

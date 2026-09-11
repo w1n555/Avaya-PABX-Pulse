@@ -201,8 +201,14 @@ function Ensure-DotNetHosting {
 }
 
 function Find-Python {
+    param([string]$Root = "")
     Refresh-Path
-    $cands = @(
+    $cands = @()
+    if ($Root) {
+        $cands += (Join-Path $Root "python\runtime\python.exe")
+        $cands += (Join-Path $Root "python\.venv\Scripts\python.exe")
+    }
+    $cands += @(
         (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313\python.exe"),
         (Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"),
         (Join-Path $env:LOCALAPPDATA "Programs\Python\Python311\python.exe"),
@@ -292,16 +298,25 @@ function Install-Python311 {
 }
 
 function Ensure-Python {
-    $py = Find-Python
+    param([string]$Root = "")
+    $py = Find-Python -Root $Root
     if ($py) {
         Write-Ok "Python 3.11+ found: $py"
         return
     }
-    Write-Warn "Python 3.11+ not detected"
+    Write-Warn "Python 3.11+ not detected (no bundled python\runtime and no system Python)"
     if (-not $NonInteractive) {
         $ans = Read-Host "Install Python 3.12 now? [Y/n]"
         if ($ans -match '^[nN]') {
-            throw "Python is required. Install from https://www.python.org (check Add to PATH) and re-run."
+            throw @"
+Python is required for OSSI.
+
+Offline: copy python\runtime from a working Pulse PC (or GitHub Release python-runtime.zip)
+into: $Root\python\runtime
+Then re-run install.bat.
+
+Online: install Python 3.12 from https://www.python.org (Add to PATH) and re-run.
+"@
         }
     }
     Install-Python311
@@ -457,6 +472,11 @@ function Repair-VenvHome([string]$root, [string]$basePython) {
 }
 
 function Ensure-PythonVenv([string]$root, [string]$basePython) {
+    $runtimePy = Join-Path $root "python\runtime\python.exe"
+    if (Test-AvayaOssiImport -py $runtimePy -root $root) {
+        Write-Ok "Python OSSI ready (bundled python\runtime): $runtimePy"
+        return ,$runtimePy
+    }
     $venvPy = Join-Path $root "python\.venv\Scripts\python.exe"
     $vendor = Join-Path $root "vendor\avaya-ossi"
     if (-not (Test-Path $vendor)) {
@@ -1039,10 +1059,10 @@ try {
     Write-Ok "IIS detected"
 
     Ensure-DotNetHosting
-    Ensure-Python
 
     $root = Read-UserPath -defaultPath $defaultRoot
     $port = Read-Port -defaultPort 8888
+    Ensure-Python -Root $root
 
     # Auto-detect: git pull if clone; existing install => full refresh
     $isUpgrade = Update-CodeFromGit -root $root
@@ -1062,7 +1082,7 @@ try {
 
     Ensure-DataFiles -root $root
 
-    $basePy = Find-Python
+    $basePy = Find-Python -Root $root
     if (-not $basePy) { throw "Python still not found after install step." }
     Write-Ok "Python: $basePy"
     $venvPy = Ensure-PythonVenv -root $root -basePython $basePy

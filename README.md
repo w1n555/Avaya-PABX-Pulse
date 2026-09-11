@@ -56,7 +56,9 @@ It does **not** replace Avaya System Manager or SAT for administration. It is th
 - `git clone https://github.com/w1n555/Avaya-PABX-Pulse.git` then copy/move into e.g. `C:\inetpub\wwwroot\CM`  
 - Or GitHub → **Releases** → download Source zip → extract to e.g. `C:\inetpub\wwwroot\CM`
 
-Do **not** copy `python\.venv` or `data_live` from another PC (install creates them). Copy `map\sites.json` only if you already have site pins.
+**Python:** the GitHub **python-runtime.zip** (Release assets) is a portable `python.exe` + OSSI packages. Extract it to `python\runtime\` under the app. Then **you do not install Python** and the PC does not need internet for pip.
+
+Do **not** copy `data_live` from another PC unless you want the same monitored trunks. Copy `map\sites.json` only if you already have site pins.
 
 ```bat
 cd C:\inetpub\wwwroot\CM\scripts
