@@ -414,6 +414,17 @@ function Ensure-DataFiles([string]$root) {
         Set-Content -Path $td -Value ($tdObj | ConvertTo-Json -Depth 4) -Encoding UTF8
     }
     New-Item -ItemType Directory -Force -Path (Join-Path $data "logs") | Out-Null
+    $stubs = @{
+        "gateways_cache.json"   = '{"ok":true,"connected":false,"items":[],"summary":{}}'
+        "alarms_cache.json"     = '{"ok":true,"connected":false,"active":[],"resolved":[],"mtceTypes":[],"summary":{}}'
+        "extensions_cache.json" = '{"ok":true,"connected":false,"items":[],"summary":{}}'
+    }
+    foreach ($name in $stubs.Keys) {
+        $fp = Join-Path $root $name
+        if (-not (Test-Path $fp)) {
+            Set-Content -Path $fp -Value $stubs[$name] -Encoding UTF8
+        }
+    }
 }
 
 function Test-AvayaOssiImport([string]$py, [string]$root) {
