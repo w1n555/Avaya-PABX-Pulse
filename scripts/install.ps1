@@ -478,31 +478,36 @@ function Ensure-PythonVenv([string]$root, [string]$basePython) {
         return ,$venvPy
     }
     $wheelDir = Join-Path $root 'python\wheels'
+    $whl = @()
     if (Test-Path $wheelDir) {
-        Write-Info 'Installing paramiko from python\wheels (offline, no PyPI, ~1 min)...'
-        try {
-            & $venvPy -m pip install --no-index --find-links $wheelDir setuptools wheel paramiko python-dotenv
-            & $venvPy -m pip install --no-index --no-build-isolation --find-links $wheelDir -e $vendor
-        } catch {
-            Write-Warn "offline pip: $($_.Exception.Message)"
+        $whl = @(Get-ChildItem -Path $wheelDir -Filter '*.whl' -File -ErrorAction SilentlyContinue)
+    }
+    if ($whl.Count -gt 0) {
+        Write-Info ("Installing paramiko from {0} wheel file(s) (offline, no PyPI)..." -f $whl.Count)
+        & $venvPy -m pip install --no-index --find-links $wheelDir setuptools wheel paramiko python-dotenv
+        if ($LASTEXITCODE -ne 0) {
+            throw "Offline pip failed (setuptools/paramiko). Copy python\wheels\*.whl from Pulse v1.0.4 zip into $wheelDir"
+        }
+        & $venvPy -m pip install --no-index --no-build-isolation --find-links $wheelDir -e $vendor
+        if ($LASTEXITCODE -ne 0) {
+            throw "Offline pip of vendor\avaya-ossi failed. Need setuptools wheel in python\wheels."
         }
         if (Test-AvayaOssiImport -py $venvPy -root $root) {
             Write-Ok "Python OSSI ready (wheels): $venvPy"
             return ,$venvPy
         }
+        throw "Wheels installed but import avaya_ossi/paramiko failed. Recreate python\.venv and re-run."
     }
-    Write-Info 'python\wheels miss or incomplete - trying PyPI...'
-    try {
-        & $venvPy -m pip install -U pip -q
-        & $venvPy -m pip install -e $vendor -q
-    } catch {
-        Write-Warn "pip install failed: $($_.Exception.Message)"
+    Write-Warn "python\wheels has no .whl files (need v1.0.4 package). Trying PyPI (needs internet)..."
+    & $venvPy -m pip install --no-build-isolation -e $vendor
+    if ($LASTEXITCODE -ne 0) {
+        throw "No python\wheels and PyPI unreachable. Copy python\wheels from v1.0.4 zip, then re-run install.bat."
     }
     if (Test-AvayaOssiImport -py $venvPy -root $root) {
         Write-Ok "Python OSSI ready: $venvPy"
         return ,$venvPy
     }
-    throw 'Could not install paramiko. Need python\wheels (offline) or internet to PyPI. Install Python 3.11+ then re-run install.bat.'
+    throw 'Could not import paramiko. Copy python\wheels from the Pulse zip (v1.0.4+).'
 }
 
 function Ensure-ApiPublish([string]$root, [switch]$Force) {
