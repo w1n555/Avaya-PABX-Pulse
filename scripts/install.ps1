@@ -429,18 +429,16 @@ function Ensure-DataFiles([string]$root) {
 
 function Test-AvayaOssiImport([string]$py, [string]$root) {
     if (-not $py -or -not (Test-Path $py)) { return $false }
-    $src = Join-Path $root "vendor\avaya-ossi\src"
+    $src = Join-Path $root 'vendor\avaya-ossi\src'
     $prev = $env:PYTHONPATH
     try {
         $env:PYTHONPATH = $src
-        $p = Start-Process -FilePath $py -ArgumentList @('-c', 'import avaya_ossi, paramiko') -Wait:$false -PassThru -WindowStyle Hidden
-        if (-not $p.WaitForExit(20000)) {
-            try { $p.Kill() } catch {}
-            Write-Warn "python import timed out (20s): $py"
-            return $false
-        }
-        return ($p.ExitCode -eq 0)
+        $out = & $py -c "import avaya_ossi, paramiko; print('ok')" 2>&1 | Out-String
+        if ($LASTEXITCODE -eq 0) { return $true }
+        Write-Warn ("import avaya_ossi/paramiko failed:`n" + $out.Trim())
+        return $false
     } catch {
+        Write-Warn "import test: $($_.Exception.Message)"
         return $false
     } finally {
         $env:PYTHONPATH = $prev
