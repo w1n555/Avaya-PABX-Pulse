@@ -1,75 +1,102 @@
-Avaya PABX Pulse — easy install (ZIP → IIS → Login)
-===================================================
+Avaya PABX Pulse — install (manual prereqs → offline wheels → IIS)
+==================================================================
 
-Your goal (supported):
-  1. Install IIS yourself (Windows Features)
-  2. Extract this package to ANY folder you choose
-     (example only: C:\inetpub\wwwroot\CM — any path is fine)
-  3. Right-click PowerShell → Run as administrator. Then:
+Production servers often have NO CDN. Do not expect winget / auto-download
+of the Hosting Bundle or Python. Install those yourself, then run install.bat.
 
-       cd <YOUR_EXTRACT_FOLDER>\scripts
-       install.bat
+----------------------------------------------------------------
+Step 0 — Manual prerequisites (you install)
+----------------------------------------------------------------
+  1. Windows IIS (Windows Features → Internet Information Services)
+     Include: IIS Management Console, World Wide Web Services
+  2. .NET 8 Hosting Bundle (NOT the SDK)
+     https://dotnet.microsoft.com/download/dotnet/8.0
+  3. Python 3.11 or 3.12 only (prefer 3.12)
+     https://www.python.org — tick "Add python.exe to PATH"
+     Python 3.13+ is REJECTED: python\wheels are cp311/cp312 ABI only.
 
-     (install.bat bypasses Windows script policy. Same as:
-       powershell -ExecutionPolicy Bypass -File .\install.ps1 )
+----------------------------------------------------------------
+Step 1 — Extract package
+----------------------------------------------------------------
+  Extract / clone to ANY folder (example only: C:\inetpub\wwwroot\CM).
 
-  4. Confirm ROOT path when asked (default = package folder)
-  5. Open the URL printed (typical nested install):
-       http://127.0.0.1:8888/CM/
-       API: http://127.0.0.1:8888/CM/api/health
-     (site root http://127.0.0.1:8888/ can stay YOUR other web service)
-  6. Enter YOUR CM Host + Password → Login → monitoring starts
+----------------------------------------------------------------
+Step 2 — Run installer as Administrator
+----------------------------------------------------------------
+  Right-click PowerShell or CMD → Run as administrator:
 
-What install.ps1 does:
-  - Detects IIS (if missing, tells you to install IIS first — does NOT auto-install IIS)
-  - Checks / installs .NET 8 Hosting Bundle if missing (winget or download)
-  - Checks / installs Python 3.12 if missing (winget or python.org, with PATH)
-  - Asks LOCAL ROOT path (e.g. ...\wwwroot\CM) — your app files only
-  - Asks existing IIS PORT (where your main web service already runs)
-  - Default Nested (parasite) mode — for ALL machines:
-      * Finds the IIS site on that port
-      * Adds ONLY:
-          /CM     -> your ROOT path
+    cd <YOUR_EXTRACT_FOLDER>\scripts
+    install.bat
+
+  install.bat prechecks (Admin, IIS/appcmd, ANCM, Python 3.11|3.12) with
+  Traditional Chinese + English errors, then runs install.ps1
+  (ExecutionPolicy Bypass). Exit non-zero on precheck failure.
+
+  Confirm ROOT path when asked (default = package folder).
+  Confirm existing IIS PORT (Nested default, often 8888).
+
+----------------------------------------------------------------
+What install.ps1 does (and does NOT do)
+----------------------------------------------------------------
+  DOES:
+  - Ensure IIS / ANCM / Python 3.11|3.12 already present (throw if missing)
+  - Nested (default) OR Dedicated IIS mode
+      Nested: find site on the chosen port; add ONLY
+          /CM     -> your ROOT
           /CM/api -> your ROOT\api
-      * NEVER changes parent site ROOT physical path
-      * NEVER replaces http://host:port/ homepage
-  - Creates Python venv + installs bundled avaya-ossi (vendor\)
-  - Registers OSSI bridge auto-start at Windows logon
+        NEVER changes parent site ROOT physical path / homepage
+      Dedicated: -IisMode Dedicated -SitePort <free port>
+  - Create python\.venv and pip-install from python\wheels (offline, no PyPI)
+  - Use / publish api\CmApi.dll
+  - Write api\appsettings.json (OSSI bind 127.0.0.1)
+  - Register scheduled task CM-NOC-OSSI-Bridge:
+      AtStartup, SYSTEM, bind 127.0.0.1:18776 (hidden via run-hidden.vbs)
+  - Start bridge now; CmApi Login can also EnsureBridgeRunningAsync
 
-  Optional: -IisMode Dedicated -SitePort 8890  (full site on a FREE port only)
+  DOES NOT:
+  - Auto-install IIS
+  - Auto-download / winget Hosting Bundle or Python (no CDN path)
+  - Bind OSSI bridge on 0.0.0.0 (loopback only)
 
-You install IIS, .NET 8 Hosting Bundle, and Python 3.11+ yourself.
-paramiko etc. install from python\wheels\ (offline pip, no PyPI).
+----------------------------------------------------------------
+Offline wheels
+----------------------------------------------------------------
+  python\wheels\ must be present (shipped in the zip/repo).
+  Installer:
 
-You do NOT need a separate OSSI repo clone.
-You do NOT need to start the bridge manually every day.
+    pip install --no-index --find-links=python\wheels setuptools wheel paramiko python-dotenv
+    pip install --no-index --no-build-isolation --find-links=python\wheels -e vendor\avaya-ossi
 
-Requirements:
-  - Windows IIS (user installs)
-  - Admin rights for install.ps1
-  - Internet access the first time (to download Hosting Bundle / Python if missing)
+  No separate OSSI repo clone. No daily manual bridge start.
 
-Optional flags:
-  -SkipDotNetInstall   do not auto-install Hosting Bundle
-  -SkipPythonInstall   do not auto-install Python
+----------------------------------------------------------------
+Security defaults
+----------------------------------------------------------------
+  - Bridge: 127.0.0.1:18776 (loopback only; no API key)
+  - CmApi BaseUrl: http://127.0.0.1:18776
+  - Restrict / firewall IIS exposure (operators)
+  - web.config hides: src, scripts, python, data_live, cdr-link, vendor, docs, .git
+  - Do not commit data_live\
+
+----------------------------------------------------------------
+Optional flags
+----------------------------------------------------------------
   -SkipUpdate          do not git pull (freeze code on disk)
   -NonInteractive -RootPath "C:\path" -SitePort 8888
+  -IisMode Dedicated -SitePort 8890
 
-------------------------------------------------------------
-ONE command for new install AND upgrade (auto-detect)
-------------------------------------------------------------
-Always the same:
-
+----------------------------------------------------------------
+ONE command for new install AND upgrade
+----------------------------------------------------------------
   cd <YOUR_EXTRACT_FOLDER>\scripts
   install.bat
 
-Script detects:
-  - git clone?  -> auto git pull from GitHub
-  - existing api/venv/data?  -> full upgrade path
-  - keeps data_live\monitored_trunks.json
-  - republish api, rewire IIS, restart bridge
+  Detects git clone → git pull; keeps monitored_trunks.json;
+  republish api, rewire IIS, restart bridge.
 
-No need for -Update flag.
+ZIP-only (no .git): re-run after replacing files, or convert to git clone
+once for auto pull next time.
 
-ZIP-only (no .git): re-run install.ps1 after replacing files,
-or convert to git clone once for auto pull next time.
+Typical URLs (Nested on 8888):
+  http://127.0.0.1:8888/CM/
+  http://127.0.0.1:8888/CM/api/health

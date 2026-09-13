@@ -1,14 +1,18 @@
 @echo off
-REM Durable OSSI bridge starter ??? uses site-local Python only (IIS-safe)
+REM Durable OSSI bridge starter — site-local Python (IIS-safe), loopback bind
 setlocal EnableExtensions
-set "SITE=C:\inetpub\wwwroot\CM"
+REM Derive site root from this script location (portable; not hardcoded)
+set "SITE=%~dp0.."
+pushd "%SITE%" >nul
+set "SITE=%CD%"
+popd >nul
 set "PYTHONPATH=%SITE%\vendor\avaya-ossi\src"
 set "PYTHONUNBUFFERED=1"
 
 REM Site venv. Use python.exe (not pythonw): pythonw can bind 18776 but return empty HTTP.
 set "PY=%SITE%\python\.venv\Scripts\python.exe"
 if not exist "%PY%" (
-  echo ERROR: No site venv. Run scripts\install.bat first (uses system Python 3.11+).
+  echo ERROR: No site venv. Run scripts\install.bat first (uses system Python 3.11 or 3.12).
   exit /b 1
 )
 
@@ -36,8 +40,8 @@ if not errorlevel 1 (
 REM Drop stale locks from crashed instances
 if exist "%DATA%\ossi_bridge_%PORT%.lock" del /f /q "%DATA%\ossi_bridge_%PORT%.lock" >nul 2>&1
 
-REM Hidden python.exe (not pythonw). WScript window style 0 = no black console.
-wscript.exe //nologo "%SITE%\scripts\run-hidden.vbs" "%PY%" "%SITE%\python\ossi_service.py" 0.0.0.0 %PORT% "%DATA%" "%PYTHONPATH%"
+REM Hidden python.exe (not pythonw). Absolute paths via run-hidden.vbs (avoids WSH 80070002).
+REM Bind 127.0.0.1 only — CmApi uses http://127.0.0.1:18776
+wscript.exe //nologo "%SITE%\scripts\run-hidden.vbs" "%PY%" "%SITE%\python\ossi_service.py" 127.0.0.1 %PORT% "%DATA%" "%PYTHONPATH%"
 endlocal
 exit /b 0
-

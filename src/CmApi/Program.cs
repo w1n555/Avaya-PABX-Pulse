@@ -20,13 +20,19 @@ builder.Services.ConfigureHttpJsonOptions(o =>
 {
     o.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
 });
+// Same-origin UI (/CM + /CM/api) does not need reflect-any-origin + credentials.
+// Narrow CORS: loopback tooling only; no AllowCredentials wide-open.
 builder.Services.AddCors(o =>
 {
     o.AddDefaultPolicy(p => p
         .AllowAnyHeader()
         .AllowAnyMethod()
-        .SetIsOriginAllowed(_ => true)
-        .AllowCredentials());
+        .SetIsOriginAllowed(static origin =>
+        {
+            if (string.IsNullOrWhiteSpace(origin)) return false;
+            if (!Uri.TryCreate(origin, UriKind.Absolute, out var u)) return false;
+            return u.IsLoopback;
+        }));
 });
 
 builder.WebHost.UseIIS();

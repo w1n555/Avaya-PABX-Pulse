@@ -3,7 +3,7 @@
 OSSI bridge for Avaya PABX Pulse (read-only list/display/status).
 
 Package: vendor/avaya-ossi (AVAYA-OSSI-2026).
-Default bind 0.0.0.0:18776, data dir data_live/. One SSH session, one lock.
+Default bind 127.0.0.1:18776, data dir data_live/. One SSH session, one lock.
 Password stays in process memory only.
 
 Main JSON routes (CmApi proxies these):
@@ -2068,6 +2068,7 @@ def alarms_public() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "OssiBridge/1.0"
 
@@ -2081,7 +2082,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        # Bridge is loopback-only for CmApi; no reflect-any-origin.
+        self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1")
         self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
@@ -2135,7 +2137,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self) -> None:  # noqa: N802
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1")
         self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
@@ -2655,7 +2657,7 @@ def _health_already_up(host: str, port: int) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="OSSI bridge for CM NOC")
-    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18776)
     parser.add_argument("--data-dir", default=str(PATHS.data_dir))
     args = parser.parse_args()

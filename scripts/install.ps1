@@ -1,24 +1,27 @@
 ﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-  One-click IIS setup for Avaya PABX Pulse (easy path).
+  IIS setup for Avaya PABX Pulse (Nested default, Dedicated optional).
 
-  You install IIS, .NET 8 Hosting Bundle, and Python 3.11+ yourself.
-  If any of those is missing, this script prints a message and stops.
-  Then it one-click: nested /CM, venv + python\wheels, prebuilt api\CmApi.dll, hidden OSSI bridge.
+  MANUAL PREREQS (install yourself — no winget/CDN auto-download):
+    - Windows IIS (appcmd)
+    - .NET 8 Hosting Bundle (ANCM) — not the SDK
+    - Python 3.11 or 3.12 only (prefer 3.12; Add to PATH)
+  Prefer scripts\install.bat — it prechecks those before this script.
 
-  ONE command for both first install AND upgrade (auto-detect):
-    powershell -ExecutionPolicy Bypass -File .\install.ps1
+  Then this script: Nested /CM (or Dedicated site), venv + offline python\wheels,
+  prebuilt api\CmApi.dll, loopback OSSI bridge (127.0.0.1:18776), scheduled task.
 
-  If folder is a git clone -> auto git pull + republish + restart services.
-  If already configured -> safe re-run (idempotent upgrade).
-  data_live\monitored_trunks.json is kept.
+  ONE command for first install AND upgrade (auto-detect):
+    install.bat
+  data_live\monitored_trunks.json is kept across upgrades.
 
 .EXAMPLE
   cd C:\inetpub\wwwroot\CM\scripts
-  powershell -ExecutionPolicy Bypass -File .\install.ps1
+  install.bat
 
   .\install.ps1 -RootPath "C:\inetpub\wwwroot\CM" -SitePort 8888 -NonInteractive
+  .\install.ps1 -IisMode Dedicated -SitePort 8890
 #>
 
 [CmdletBinding()]
@@ -34,8 +37,6 @@ param(
     [string]$SiteName = "CM-NOC",
     [string]$AppPoolName = "CmApiNoManaged",
     [switch]$SkipPublish,
-    [switch]$SkipDotNetInstall,
-    [switch]$SkipPythonInstall,
     [switch]$SkipUpdate,
     [switch]$NonInteractive
 )
@@ -82,16 +83,6 @@ function Refresh-Path {
                 [System.Environment]::GetEnvironmentVariable("Path", "User")
 }
 
-function Get-DownloadDir {
-    $d = Join-Path $env:TEMP "cm-noc-install"
-    New-Item -ItemType Directory -Force -Path $d | Out-Null
-    return $d
-}
-
-function Test-Winget {
-    return [bool](Get-Command winget -ErrorAction SilentlyContinue)
-}
-
 function Test-AspNetCoreModule {
     $p1 = Join-Path $env:ProgramFiles "IIS\Asp.Net Core Module\V2\aspnetcorev2.dll"
     $p2 = Join-Path ${env:ProgramFiles(x86)} "IIS\Asp.Net Core Module\V2\aspnetcorev2.dll"
@@ -108,76 +99,6 @@ function Test-DotNetHosting {
     return $false
 }
 
-function Restart-IisSafe {
-    Write-Info "Restarting IIS so ASP.NET Core Module loads..."
-    try {
-        & iisreset 2>&1 | Out-Host
-    } catch {
-        try {
-            Restart-Service W3SVC -Force -ErrorAction SilentlyContinue
-            Restart-Service WAS -Force -ErrorAction SilentlyContinue
-        } catch {
-            Write-Warn "Could not restart IIS automatically: $_"
-        }
-    }
-}
-
-function Install-DotNetHostingBundle {
-    if ($SkipDotNetInstall) {
-        Write-Warn "SkipDotNetInstall set - not installing Hosting Bundle"
-        return
-    }
-    Write-Info ".NET 8 Hosting Bundle / ANCM not found - installing..."
-
-    if (Test-Winget) {
-        Write-Info "Trying winget: Microsoft.DotNet.HostingBundle.8"
-        try {
-            & winget install -e --id Microsoft.DotNet.HostingBundle.8 --accept-package-agreements --accept-source-agreements --silent 2>&1 | Out-Host
-            Start-Sleep -Seconds 2
-            if (Test-DotNetHosting) {
-                Write-Ok ".NET Hosting Bundle installed via winget"
-                Restart-IisSafe
-                return
-            }
-        } catch {
-            Write-Warn "winget Hosting Bundle failed: $_"
-        }
-    }
-
-    $dl = Get-DownloadDir
-    $installer = Join-Path $dl "dotnet-hosting-win.exe"
-    $urls = @(
-        "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/8.0.14/dotnet-hosting-8.0.14-win.exe",
-        "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/8.0.11/dotnet-hosting-8.0.11-win.exe"
-    )
-    $ok = $false
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    foreach ($url in $urls) {
-        try {
-            Write-Info "Downloading Hosting Bundle..."
-            Write-Host "  $url"
-            Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
-            if ((Get-Item $installer).Length -gt 1MB) { $ok = $true; break }
-        } catch {
-            Write-Warn "Download failed: $_"
-        }
-    }
-    if (-not $ok) {
-        throw "Could not download .NET Hosting Bundle. Install manually from https://dotnet.microsoft.com/download/dotnet/8.0 (Hosting Bundle), then re-run."
-    }
-
-    Write-Info "Running Hosting Bundle installer (quiet)..."
-    $p = Start-Process -FilePath $installer -ArgumentList @("/install", "/quiet", "/norestart") -Wait -PassThru
-    if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
-        Write-Warn "Hosting Bundle installer exit code $($p.ExitCode)"
-    }
-    Restart-IisSafe
-    if (-not (Test-DotNetHosting)) {
-        throw "Hosting Bundle still not detected. Install manually from https://dotnet.microsoft.com/download/dotnet/8.0 then re-run."
-    }
-    Write-Ok ".NET Hosting Bundle ready"
-}
-
 function Ensure-DotNetHosting {
     if (Test-DotNetHosting) {
         Write-Ok ".NET ASP.NET Core Hosting / ANCM present"
@@ -186,106 +107,78 @@ function Ensure-DotNetHosting {
     throw "Missing .NET 8 Hosting Bundle. Install it, then re-run install.bat. https://dotnet.microsoft.com/download/dotnet/8.0 (Hosting Bundle, not the SDK)"
 }
 
+function Test-PythonVersionOk([string]$exe) {
+    if (-not $exe -or -not (Test-Path $exe)) { return $false }
+    try {
+        $ver = & $exe --version 2>&1 | Out-String
+        # Offline wheels: cp311 / cp312 only — reject 3.13+
+        return [bool]($ver -match 'Python 3\.(11|12)(\D|$)')
+    } catch {
+        return $false
+    }
+}
+
 function Find-Python {
     param([string]$Root = "")
     Refresh-Path
     $cands = @(
-        (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313\python.exe"),
         (Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"),
         (Join-Path $env:LOCALAPPDATA "Programs\Python\Python311\python.exe"),
-        "C:\Program Files\Python313\python.exe",
         "C:\Program Files\Python312\python.exe",
         "C:\Program Files\Python311\python.exe",
-        "C:\Python313\python.exe",
         "C:\Python312\python.exe",
         "C:\Python311\python.exe"
     )
     foreach ($c in $cands) {
-        if (-not (Test-Path $c)) { continue }
-        try {
-            $ver = & $c --version 2>&1 | Out-String
-            if ($ver -match "Python 3\.(1[1-9]|[2-9]\d)") { return $c }
-        } catch {}
+        if (Test-PythonVersionOk $c) { return $c }
     }
     $cmd = Get-Command python -ErrorAction SilentlyContinue
-    if ($cmd) {
-        try {
-            $ver = & $cmd.Source --version 2>&1 | Out-String
-            if ($ver -match "Python 3\.(1[1-9]|[2-9]\d)") { return $cmd.Source }
-        } catch {}
-    }
+    if ($cmd -and (Test-PythonVersionOk $cmd.Source)) { return $cmd.Source }
     $py = Get-Command py -ErrorAction SilentlyContinue
     if ($py) {
-        foreach ($v in @("-3.12", "-3.11", "-3")) {
+        foreach ($v in @("-3.12", "-3.11")) {
             try {
                 $out = & py $v -c "import sys; print(sys.executable)" 2>$null
-                if ($out -and (Test-Path $out.Trim())) { return $out.Trim() }
+                if ($out -and (Test-PythonVersionOk $out.Trim())) { return $out.Trim() }
             } catch {}
         }
     }
     return $null
 }
 
-function Install-Python311 {
-    if ($SkipPythonInstall) {
-        Write-Warn "SkipPythonInstall set - not installing Python"
-        return
-    }
-    Write-Info "Python 3.11+ not found - installing..."
-
-    if (Test-Winget) {
-        Write-Info "Trying winget: Python.Python.3.12"
-        try {
-            & winget install -e --id Python.Python.3.12 --accept-package-agreements --accept-source-agreements --silent 2>&1 | Out-Host
-            Start-Sleep -Seconds 2
-            Refresh-Path
-            if (Find-Python) {
-                Write-Ok "Python installed via winget: $(Find-Python)"
-                return
-            }
-        } catch {
-            Write-Warn "winget Python install failed: $_"
-        }
-    }
-
-    $dl = Get-DownloadDir
-    $ver = "3.12.8"
-    $url = "https://www.python.org/ftp/python/$ver/python-$ver-amd64.exe"
-    $exe = Join-Path $dl "python-$ver-amd64.exe"
-    Write-Info "Downloading Python $ver from python.org..."
-    try {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing
-    } catch {
-        throw "Failed to download Python. Install Python 3.11+ manually (check Add to PATH), then re-run. $_"
-    }
-    Write-Info "Running Python installer (quiet, AllUsers, PrependPath)..."
-    $p = Start-Process -FilePath $exe -ArgumentList @(
-        "/quiet",
-        "InstallAllUsers=1",
-        "PrependPath=1",
-        "Include_test=0",
-        "Include_launcher=1",
-        "SimpleInstall=1"
-    ) -Wait -PassThru
-    if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
-        Write-Warn "Python installer exit code $($p.ExitCode)"
-    }
+function Find-PythonRejected313 {
+    # Surface a clear ABI error when only 3.13+ is installed
     Refresh-Path
-    if (-not (Find-Python)) {
-        throw "Python still not found after install. Open a NEW Admin PowerShell and re-run install.ps1."
+    $cands = @()
+    $cmd = Get-Command python -ErrorAction SilentlyContinue
+    if ($cmd) { $cands += $cmd.Source }
+    foreach ($ver in @("Python313", "Python314")) {
+        $cands += (Join-Path $env:LOCALAPPDATA "Programs\Python\$ver\python.exe")
+        $cands += "C:\Program Files\$ver\python.exe"
+        $cands += "C:\$ver\python.exe"
     }
-    Write-Ok "Python ready: $(Find-Python)"
+    foreach ($c in $cands) {
+        if (-not $c -or -not (Test-Path $c)) { continue }
+        try {
+            $ver = & $c --version 2>&1 | Out-String
+            if ($ver -match 'Python 3\.(1[3-9]|[2-9]\d)') { return $c }
+        } catch {}
+    }
+    return $null
 }
 
 function Ensure-Python {
     param([string]$Root = "")
     $py = Find-Python -Root $Root
     if ($py) {
-        Write-Ok "Python 3.11+ found: $py"
+        Write-Ok "Python 3.11/3.12 found: $py"
         return
     }
-    throw "Missing Python 3.11 or 3.12. Install from https://www.python.org (tick Add python.exe to PATH), then re-run install.bat."
+    $bad = Find-PythonRejected313
+    if ($bad) {
+        throw "Python 3.13+ is not supported ($bad). Offline wheels in python\wheels are built for 3.11/3.12 ABI only. Install Python 3.12 (prefer) or 3.11, tick Add to PATH, then re-run install.bat."
+    }
+    throw "Missing Python 3.11 or 3.12. Install from https://www.python.org (prefer 3.12; tick Add python.exe to PATH), then re-run install.bat. This installer does not download Python."
 }
 
 function Read-UserPath([string]$defaultPath) {
@@ -370,7 +263,7 @@ function Set-JsonAppSettings([string]$root, [string]$pythonExe) {
         AllowedHosts = "*"
         OssiBridge = @{
             BaseUrl  = "http://127.0.0.1:$($script:OssiBridgePort)"
-            Bind     = "0.0.0.0"
+            Bind     = "127.0.0.1"
             SiteRoot = $root
             DataDir  = (Join-Path $root $script:OssiDataLeaf)
             OssiSrc  = (Join-Path $root "vendor\avaya-ossi\src")
@@ -459,6 +352,9 @@ function Repair-VenvHome([string]$root, [string]$basePython) {
 }
 
 function Ensure-PythonVenv([string]$root, [string]$basePython) {
+    # Always return ONLY the canonical path. Native pip writes to the success
+    # stream; if captured into $venvPy = Ensure-PythonVenv ..., Test-Path breaks
+    # (seen as "Missing venv python: Looking in links: ...").
     $venvPy = Join-Path $root 'python\.venv\Scripts\python.exe'
     $vendor = Join-Path $root 'vendor\avaya-ossi'
     if (-not (Test-Path $vendor)) {
@@ -466,14 +362,14 @@ function Ensure-PythonVenv([string]$root, [string]$basePython) {
     }
     if (-not (Test-Path $venvPy)) {
         Write-Info 'Creating Python venv under site (first time)...'
-        & $basePython -m venv (Join-Path $root 'python\.venv')
+        & $basePython -m venv (Join-Path $root 'python\.venv') 2>&1 | ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -ne 0) { throw 'python -m venv failed' }
     }
     Repair-VenvHome -root $root -basePython $basePython
     Write-Info "Checking venv import: $venvPy"
     if (Test-AvayaOssiImport -py $venvPy -root $root) {
         Write-Ok "Python OSSI ready (existing venv): $venvPy"
-        return ,$venvPy
+        return $venvPy
     }
     $wheelDir = Join-Path $root 'python\wheels'
     $whl = @()
@@ -482,28 +378,28 @@ function Ensure-PythonVenv([string]$root, [string]$basePython) {
     }
     if ($whl.Count -gt 0) {
         Write-Info ("Installing paramiko from {0} wheel file(s) (offline, no PyPI)..." -f $whl.Count)
-        & $venvPy -m pip install --no-index --find-links $wheelDir setuptools wheel paramiko python-dotenv
+        & $venvPy -m pip install --no-index --find-links $wheelDir setuptools wheel paramiko python-dotenv 2>&1 | ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -ne 0) {
             throw "Offline pip failed (setuptools/paramiko). Copy python\wheels\*.whl from Pulse v1.0.4 zip into $wheelDir"
         }
-        & $venvPy -m pip install --no-index --no-build-isolation --find-links $wheelDir -e $vendor
+        & $venvPy -m pip install --no-index --no-build-isolation --find-links $wheelDir -e $vendor 2>&1 | ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -ne 0) {
             throw "Offline pip of vendor\avaya-ossi failed. Need setuptools wheel in python\wheels."
         }
         if (Test-AvayaOssiImport -py $venvPy -root $root) {
             Write-Ok "Python OSSI ready (wheels): $venvPy"
-            return ,$venvPy
+            return $venvPy
         }
         throw "Wheels installed but import avaya_ossi/paramiko failed. Recreate python\.venv and re-run."
     }
     Write-Warn "python\wheels has no .whl files (need v1.0.4 package). Trying PyPI (needs internet)..."
-    & $venvPy -m pip install --no-build-isolation -e $vendor
+    & $venvPy -m pip install --no-build-isolation -e $vendor 2>&1 | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) {
         throw "No python\wheels and PyPI unreachable. Copy python\wheels from v1.0.4 zip, then re-run install.bat."
     }
     if (Test-AvayaOssiImport -py $venvPy -root $root) {
         Write-Ok "Python OSSI ready: $venvPy"
-        return ,$venvPy
+        return $venvPy
     }
     throw 'Could not import paramiko. Copy python\wheels from the Pulse zip (v1.0.4+).'
 }
@@ -775,22 +671,32 @@ function Install-BridgeTask([string]$root, [string]$venvPy) {
     $script = Join-Path $root "python\ossi_service.py"
     $data = Join-Path $root $script:OssiDataLeaf
     $work = Join-Path $root "python"
-    $arg = "`"$script`" --host 0.0.0.0 --port $($script:OssiBridgePort) --data-dir `"$data`""
+    $src = Join-Path $root "vendor\avaya-ossi\src"
+    $vbs = Join-Path $root "scripts\run-hidden.vbs"
+    $bind = "127.0.0.1"
 
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    if (-not (Test-Path $script)) { throw "Missing bridge script: $script" }
+    if (-not (Test-Path $venvPy)) { throw "Missing venv python: $venvPy" }
+    New-Item -ItemType Directory -Force -Path $data | Out-Null
+
     $exe = $venvPy
     if ($exe -match 'pythonw\.exe$') {
         $exe2 = [regex]::Replace([string]$exe, 'pythonw\.exe$', 'python.exe')
         if (Test-Path $exe2) { $exe = $exe2 }
     }
-    $vbs = Join-Path $root "scripts\run-hidden.vbs"
-    $src = Join-Path $root "vendor\avaya-ossi\src"
-    if (Test-Path $vbs) {
-        $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "//nologo `"$vbs`" `"$exe`" `"$script`" 0.0.0.0 $($script:OssiBridgePort) `"$data`" `"$src`"" -WorkingDirectory $work
+
+    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+
+    # Absolute paths + existing files (avoids WSH 80070002 on first install)
+    if ((Test-Path $vbs) -and (Test-Path $exe) -and (Test-Path $script)) {
+        $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "//nologo `"$vbs`" `"$exe`" `"$script`" $bind $($script:OssiBridgePort) `"$data`" `"$src`"" -WorkingDirectory $work
     } else {
+        $arg = "`"$script`" --host $bind --port $($script:OssiBridgePort) --data-dir `"$data`""
         $action = New-ScheduledTaskAction -Execute $exe -Argument $arg -WorkingDirectory $work
     }
-    $trigger = New-ScheduledTaskTrigger -AtLogOn
+
+    # Headless NOC: AtStartup as SYSTEM (not AtLogOn Interactive)
+    $trigger = New-ScheduledTaskTrigger -AtStartup
     $settings = New-ScheduledTaskSettingsSet `
         -AllowStartIfOnBatteries `
         -DontStopIfGoingOnBatteries `
@@ -799,10 +705,10 @@ function Install-BridgeTask([string]$root, [string]$venvPy) {
         -ExecutionTimeLimit ([TimeSpan]::Zero) `
         -StartWhenAvailable `
         -Hidden
-    $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
     try { Start-ScheduledTask -TaskName $TaskName } catch { Write-Warn "Task start: $_" }
-    Write-Ok "Scheduled task $TaskName (auto-start bridge at logon)"
+    Write-Ok "Scheduled task $TaskName (AtStartup SYSTEM, bind $bind)"
 }
 
 function Test-BridgeHealth([int]$port = 0) {
@@ -874,11 +780,11 @@ function Start-BridgeNow([string]$root, [string]$venvPy, [switch]$ForceRestart) 
         $src = Join-Path $root "vendor\avaya-ossi\src"
         if (Test-Path $vbs) {
             Start-Process -FilePath "wscript.exe" -ArgumentList @(
-                "//nologo", $vbs, $py, $script, "0.0.0.0", "$($script:OssiBridgePort)", $data, $src
+                "//nologo", $vbs, $py, $script, "127.0.0.1", "$($script:OssiBridgePort)", $data, $src
             ) -WindowStyle Hidden -ErrorAction SilentlyContinue | Out-Null
         } else {
             Start-Process -FilePath $py -ArgumentList @(
-                $script, "--host", "0.0.0.0", "--port", "$($script:OssiBridgePort)", "--data-dir", $data
+                $script, "--host", "127.0.0.1", "--port", "$($script:OssiBridgePort)", "--data-dir", $data
             ) -WorkingDirectory $work -WindowStyle Hidden -ErrorAction SilentlyContinue | Out-Null
         }
 
@@ -1026,6 +932,26 @@ function Update-CodeFromGit([string]$root) {
     return $true
 }
 
+function Get-AppPoolState {
+    $appcmd = Get-AppCmd
+    if (-not $appcmd) { return $null }
+    try {
+        $state = (& $appcmd list apppool /apppool.name:"$AppPoolName" /text:state 2>$null | Out-String).Trim()
+        if ($state) { return $state }
+    } catch {}
+    return $null
+}
+
+function Start-AppPoolSure {
+    $appcmd = Get-AppCmd
+    if (-not $appcmd) { return $false }
+    & $appcmd set apppool /apppool.name:"$AppPoolName" /autoStart:true 2>$null | Out-Null
+    & $appcmd start apppool /apppool.name:"$AppPoolName" 2>&1 | ForEach-Object { Write-Host $_ }
+    Start-Sleep -Milliseconds 800
+    $state = Get-AppPoolState
+    return ($state -eq 'Started')
+}
+
 function Restart-AppPool {
     $appcmd = Get-AppCmd
     if (-not $appcmd) { return }
@@ -1037,11 +963,40 @@ function Restart-AppPool {
         } else {
             Start-Sleep -Seconds 1
         }
-        & $appcmd start apppool /apppool.name:"$AppPoolName" 2>$null | Out-Null
-        Write-Ok "App pool $AppPoolName start requested"
     } catch {
-        Write-Warn "Could not recycle app pool: $_"
+        Write-Warn "apppool stop: $_"
     }
+    $ok = $false
+    for ($i = 1; $i -le 5; $i++) {
+        if (Start-AppPoolSure) { $ok = $true; break }
+        Write-Warn "App pool not Started yet (try $i/5, state=$(Get-AppPoolState)) - retrying..."
+        Start-Sleep -Seconds 2
+    }
+    if ($ok) {
+        Write-Ok "App pool $AppPoolName is Started"
+    } else {
+        throw "App pool $AppPoolName failed to reach Started (state=$(Get-AppPoolState)). Fix in IIS Manager, then re-run install.ps1."
+    }
+}
+
+function Wait-ApiHealth([string]$apiHealth, [int]$attempts = 10) {
+    for ($i = 1; $i -le $attempts; $i++) {
+        try {
+            $h = Invoke-WebRequest $apiHealth -UseBasicParsing -TimeoutSec 8
+            Write-Ok "API health: $($h.Content)"
+            return $true
+        } catch {
+            $msg = $_.Exception.Message
+            if ($msg -match '503' -or $msg -match 'Unavailable') {
+                Write-Warn "API 503/unavailable (try $i/$attempts) - ensuring app pool Started..."
+                [void](Start-AppPoolSure)
+            } else {
+                Write-Warn "API not answering yet at $apiHealth (try $i/$attempts): $msg"
+            }
+            Start-Sleep -Seconds 2
+        }
+    }
+    return $false
 }
 
 # ---------------- main ----------------
@@ -1057,7 +1012,7 @@ try {
         Write-Host "Please install IIS yourself first, for example:"
         Write-Host "  - Windows Features -> Internet Information Services"
         Write-Host "  - Include: IIS Management Console, World Wide Web Services"
-        Write-Host "Then re-run this script (it can install Hosting Bundle + Python for you)."
+        Write-Host "Then install .NET 8 Hosting Bundle + Python 3.12 yourself and re-run install.bat."
         exit 2
     }
     Write-Ok "IIS detected"
@@ -1087,10 +1042,13 @@ try {
     Ensure-DataFiles -root $root
 
     $basePy = Find-Python -Root $root
-    if (-not $basePy) { throw "Python still not found after install step." }
+    if (-not $basePy) { throw "Python 3.11/3.12 still not found." }
     Write-Ok "System Python: $basePy"
     Write-Info "Preparing site venv (python\.venv) from that interpreter..."
-    $venvPy = Ensure-PythonVenv -root $root -basePython $basePy
+    $venvPyExpected = Join-Path $root 'python\.venv\Scripts\python.exe'
+    $venvPy = Ensure-PythonVenv -root $root -basePython $basePy | Select-Object -Last 1
+    if (-not $venvPy -or -not (Test-Path -LiteralPath "$venvPy")) { $venvPy = $venvPyExpected }
+    if (-not (Test-Path -LiteralPath "$venvPy")) { throw "Missing venv python after Ensure-PythonVenv: $venvPyExpected" }
     Write-Ok "Bridge will run: $venvPy"
 
     Ensure-ApiPublish -root $root
@@ -1109,11 +1067,8 @@ try {
     $apiHealth = "http://127.0.0.1:${port}$urlPrefix/api/health".Replace("//api", "/api")
     # Fix accidental double slash
     $apiHealth = $apiHealth -replace '(?<!:)/{2,}', '/'
-    try {
-        $h = Invoke-WebRequest $apiHealth -UseBasicParsing -TimeoutSec 15
-        Write-Ok "API health: $($h.Content)"
-    } catch {
-        Write-Warn "API not answering yet at $apiHealth : $_"
+    if (-not (Wait-ApiHealth -apiHealth $apiHealth -attempts 10)) {
+        throw "API still not healthy at $apiHealth after app-pool start retries. Check IIS site binding and CmApiNoManaged pool."
     }
 
     Write-Host ""
@@ -1135,7 +1090,8 @@ try {
     Write-Host ""
     Write-Host "  Root folder:  $root"
     Write-Host "  IIS mode:     $IisMode  (Nested = /CM under existing site)"
-    Write-Host "  Bridge auto-starts at Windows logon (task CM-NOC-OSSI-Bridge)"
+    Write-Host "  Bridge auto-starts at Windows startup (task CM-NOC-OSSI-Bridge, SYSTEM, 127.0.0.1)"
+    Write-Host "  Bridge:      127.0.0.1:18776 (loopback only; firewall/restrict IIS exposure)"
     Write-Host ""
     Write-Host "Later upgrade: same command"
     Write-Host "  powershell -ExecutionPolicy Bypass -File .\install.ps1"

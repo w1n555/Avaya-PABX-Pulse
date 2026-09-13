@@ -45,3 +45,6 @@ vendor/avaya-ossi/**/*.egg-info/
 scripts/start-bridge-18766.*
 scripts/start-bridge-18767.*
 
+
+# Leftover local overrides (not used; do not commit if present)
+config.local.js

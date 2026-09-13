@@ -64,9 +64,9 @@ public sealed class OssiBridgeClient
             _pythonExe = FindPythonWithAvayaOssi();
 
         var bridgeUri = new Uri(baseUrl.TrimEnd('/') + "/");
-        // Bind is the listen address (0.0.0.0). BaseUrl stays loopback for CmApi → bridge HTTP.
-        var bind = (config["OssiBridge:Bind"] ?? "0.0.0.0").Trim();
-        _bridgeListenHost = string.IsNullOrWhiteSpace(bind) ? "0.0.0.0" : bind;
+        // Bind is the listen address (loopback by default). BaseUrl stays 127.0.0.1 for CmApi → bridge HTTP.
+        var bind = (config["OssiBridge:Bind"] ?? "127.0.0.1").Trim();
+        _bridgeListenHost = string.IsNullOrWhiteSpace(bind) ? "127.0.0.1" : bind;
         _bridgeListenPort = bridgeUri.IsDefaultPort ? 18776 : bridgeUri.Port;
 
         _http = new HttpClient
@@ -90,13 +90,12 @@ public sealed class OssiBridgeClient
         };
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        foreach (var ver in new[] { "Python313", "Python312", "Python311" })
+        foreach (var ver in new[] { "Python312", "Python311" })
         {
             list.Add(Path.Combine(local, "Programs", "Python", ver, "python.exe"));
             list.Add(Path.Combine(pf, ver, "python.exe"));
         }
         // Common AllUsers silent-install layouts
-        list.Add(@"C:\Python313\python.exe");
         list.Add(@"C:\Python312\python.exe");
         list.Add(@"C:\Python311\python.exe");
         try
