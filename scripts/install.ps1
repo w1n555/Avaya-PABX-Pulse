@@ -932,6 +932,26 @@ function Update-CodeFromGit([string]$root) {
     return $true
 }
 
+function Get-AppPoolState {
+    $appcmd = Get-AppCmd
+    if (-not $appcmd) { return $null }
+    try {
+        $state = (& $appcmd list apppool /apppool.name:"$AppPoolName" /text:state 2>$null | Out-String).Trim()
+        if ($state) { return $state }
+    } catch {}
+    return $null
+}
+
+function Start-AppPoolSure {
+    $appcmd = Get-AppCmd
+    if (-not $appcmd) { return $false }
+    & $appcmd set apppool /apppool.name:"$AppPoolName" /autoStart:true 2>$null | Out-Null
+    & $appcmd start apppool /apppool.name:"$AppPoolName" 2>&1 | ForEach-Object { Write-Host $_ }
+    Start-Sleep -Milliseconds 800
+    $state = Get-AppPoolState
+    return ($state -eq 'Started')
+}
+
 function Restart-AppPool {
     $appcmd = Get-AppCmd
     if (-not $appcmd) { return }
@@ -943,11 +963,40 @@ function Restart-AppPool {
         } else {
             Start-Sleep -Seconds 1
         }
-        & $appcmd start apppool /apppool.name:"$AppPoolName" 2>$null | Out-Null
-        Write-Ok "App pool $AppPoolName start requested"
     } catch {
-        Write-Warn "Could not recycle app pool: $_"
+        Write-Warn "apppool stop: $_"
     }
+    $ok = $false
+    for ($i = 1; $i -le 5; $i++) {
+        if (Start-AppPoolSure) { $ok = $true; break }
+        Write-Warn "App pool not Started yet (try $i/5, state=$(Get-AppPoolState)) - retrying..."
+        Start-Sleep -Seconds 2
+    }
+    if ($ok) {
+        Write-Ok "App pool $AppPoolName is Started"
+    } else {
+        throw "App pool $AppPoolName failed to reach Started (state=$(Get-AppPoolState)). Fix in IIS Manager, then re-run install.ps1."
+    }
+}
+
+function Wait-ApiHealth([string]$apiHealth, [int]$attempts = 10) {
+    for ($i = 1; $i -le $attempts; $i++) {
+        try {
+            $h = Invoke-WebRequest $apiHealth -UseBasicParsing -TimeoutSec 8
+            Write-Ok "API health: $($h.Content)"
+            return $true
+        } catch {
+            $msg = $_.Exception.Message
+            if ($msg -match '503' -or $msg -match 'Unavailable') {
+                Write-Warn "API 503/unavailable (try $i/$attempts) - ensuring app pool Started..."
+                [void](Start-AppPoolSure)
+            } else {
+                Write-Warn "API not answering yet at $apiHealth (try $i/$attempts): $msg"
+            }
+            Start-Sleep -Seconds 2
+        }
+    }
+    return $false
 }
 
 # ---------------- main ----------------
@@ -1018,11 +1067,8 @@ try {
     $apiHealth = "http://127.0.0.1:${port}$urlPrefix/api/health".Replace("//api", "/api")
     # Fix accidental double slash
     $apiHealth = $apiHealth -replace '(?<!:)/{2,}', '/'
-    try {
-        $h = Invoke-WebRequest $apiHealth -UseBasicParsing -TimeoutSec 15
-        Write-Ok "API health: $($h.Content)"
-    } catch {
-        Write-Warn "API not answering yet at $apiHealth : $_"
+    if (-not (Wait-ApiHealth -apiHealth $apiHealth -attempts 10)) {
+        throw "API still not healthy at $apiHealth after app-pool start retries. Check IIS site binding and CmApiNoManaged pool."
     }
 
     Write-Host ""
