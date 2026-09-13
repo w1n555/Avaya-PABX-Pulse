@@ -46,5 +46,5 @@ scripts/start-bridge-18766.*
 scripts/start-bridge-18767.*
 
 
-# Install-generated client secret (do not commit)
+# Leftover local overrides (not used; do not commit if present)
 config.local.js

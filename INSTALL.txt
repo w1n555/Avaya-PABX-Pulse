@@ -48,8 +48,7 @@ What install.ps1 does (and does NOT do)
       Dedicated: -IisMode Dedicated -SitePort <free port>
   - Create python\.venv and pip-install from python\wheels (offline, no PyPI)
   - Use / publish api\CmApi.dll
-  - Write api\appsettings.json (OSSI bind 127.0.0.1, Security:ApiKey)
-  - Generate/reuse data_live\cm_api_key.txt + config.local.js (UI X-Api-Key)
+  - Write api\appsettings.json (OSSI bind 127.0.0.1)
   - Register scheduled task CM-NOC-OSSI-Bridge:
       AtStartup, SYSTEM, bind 127.0.0.1:18776 (hidden via run-hidden.vbs)
   - Start bridge now; CmApi Login can also EnsureBridgeRunningAsync
@@ -73,11 +72,11 @@ Offline wheels
 ----------------------------------------------------------------
 Security defaults
 ----------------------------------------------------------------
-  - Bridge: 127.0.0.1:18776
+  - Bridge: 127.0.0.1:18776 (loopback only; no API key)
   - CmApi BaseUrl: http://127.0.0.1:18776
-  - Mutating CmApi routes need X-Api-Key (from config.local.js / cm_api_key.txt)
+  - Restrict / firewall IIS exposure (operators)
   - web.config hides: src, scripts, python, data_live, cdr-link, vendor, docs, .git
-  - Do not commit config.local.js or data_live\
+  - Do not commit data_live\
 
 ----------------------------------------------------------------
 Optional flags
@@ -92,7 +91,7 @@ ONE command for new install AND upgrade
   cd <YOUR_EXTRACT_FOLDER>\scripts
   install.bat
 
-  Detects git clone → git pull; keeps monitored_trunks.json + cm_api_key.txt;
+  Detects git clone → git pull; keeps monitored_trunks.json;
   republish api, rewire IIS, restart bridge.
 
 ZIP-only (no .git): re-run after replacing files, or convert to git clone

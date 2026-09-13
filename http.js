@@ -1,7 +1,6 @@
 /**
  * Shared URL + fetch + HTML escape for Pulse UI modules.
  * No imports from *-ui.js (avoid cycles). Nested IIS: /CM/api/...
- * Mutating CmApi routes expect X-Api-Key from config.local.js (install.ps1).
  */
 
 export function siteUrl(path) {
@@ -15,20 +14,11 @@ export function apiUrl(path) {
   return siteUrl("api/" + String(path).replace(/^\//, ""));
 }
 
-function apiHeaders(extra) {
-  const headers = { "Content-Type": "application/json", ...(extra || {}) };
-  try {
-    const k = (typeof window !== "undefined" && window.__PULSE_API_KEY__) || "";
-    if (k) headers["X-Api-Key"] = String(k);
-  } catch (_) { /* ignore */ }
-  return headers;
-}
-
 export async function fetchJson(url, opts = {}) {
   const res = await fetch(url, {
     credentials: "same-origin",
+    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
     ...opts,
-    headers: apiHeaders(opts.headers || {}),
   });
   const text = await res.text();
   let body = null;

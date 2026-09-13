@@ -27,7 +27,6 @@ public sealed class OssiBridgeClient
     private readonly string _logDir;
     private readonly string _bridgeListenHost;
     private readonly int _bridgeListenPort;
-    private readonly string? _apiKey;
     private readonly SemaphoreSlim _startLock = new(1, 1);
 
     public OssiBridgeClient(IConfiguration config, ILogger<OssiBridgeClient> log)
@@ -70,26 +69,12 @@ public sealed class OssiBridgeClient
         _bridgeListenHost = string.IsNullOrWhiteSpace(bind) ? "127.0.0.1" : bind;
         _bridgeListenPort = bridgeUri.IsDefaultPort ? 18776 : bridgeUri.Port;
 
-        _apiKey = (config["Security:ApiKey"] ?? "").Trim();
-        if (string.IsNullOrEmpty(_apiKey))
-        {
-            try
-            {
-                var keyFile = Path.Combine(_dataDir, "cm_api_key.txt");
-                if (File.Exists(keyFile))
-                    _apiKey = File.ReadAllText(keyFile).Trim();
-            }
-            catch { /* optional */ }
-        }
-
         _http = new HttpClient
         {
             BaseAddress = bridgeUri,
             // list extension can take 30–120s; keep headroom over IIS proxy
             Timeout = TimeSpan.FromMinutes(10),
         };
-        if (!string.IsNullOrEmpty(_apiKey))
-            _http.DefaultRequestHeaders.TryAddWithoutValidation("X-Api-Key", _apiKey);
 
         _log.LogInformation(
             "OssiBridge python={Python} scriptDir={Dir} listen={Host}:{Port}",

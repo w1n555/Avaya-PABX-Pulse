@@ -101,12 +101,12 @@ Typical Nested flow:
 4. Open `http://127.0.0.1:8888/CM/`.  
 5. Enter **your** CM Host + RO user + password → **Login**.
 
-Same command **upgrades** an existing install (`git pull` if `.git` is present) and **keeps** `data_live\monitored_trunks.json` and `data_live\cm_api_key.txt`.
+Same command **upgrades** an existing install (`git pull` if `.git` is present) and **keeps** `data_live\monitored_trunks.json`.
 
 Optional flags: `-SkipUpdate`, `-NonInteractive -RootPath "C:\path" -SitePort 8888`.  
 Full notes: `INSTALL.txt`.
 
-Do **not** copy `data_live` from another PC unless you want the same monitored trunks / API key. Copy `map\sites.json` only if you already have site pins.
+Do **not** copy `data_live` from another PC unless you want the same monitored trunks. Copy `map\sites.json` only if you already have site pins.
 
 You do **not** need a separate OSSI repo or to start the bridge by hand every day. The bridge binds **127.0.0.1:18776** and auto-starts at **Windows startup** (scheduled task `CM-NOC-OSSI-Bridge` as **SYSTEM**). CmApi can also start it on Login via `EnsureBridgeRunningAsync`.
 
@@ -118,13 +118,12 @@ You do **not** need a separate OSSI repo or to start the bridge by hand every da
 |------|---------|
 | OSSI bridge bind | **127.0.0.1:18776** (loopback only; not `0.0.0.0`) |
 | CmApi → bridge | `http://127.0.0.1:18776` |
-| API key | Generated at install → `data_live\cm_api_key.txt` + `Security:ApiKey` in `api\appsettings.json` + `config.local.js` for the UI |
-| Mutating CmApi routes | Require header **`X-Api-Key`** (session connect/disconnect/heartbeat, refresh, monitored write, …). GET health/reads stay open. |
-| Bridge HTTP | Loopback mandatory; same key enforced on POST/PUT when the key file exists |
+| Bridge HTTP | Loopback only — no shared API key; rely on bind + host firewall |
+| IIS exposure | Restrict / firewall the IIS site; do not expose Pulse broadly without network controls |
 | IIS hidden segments | `src`, `scripts`, `python`, `data_live`, `cdr-link`, `vendor`, `docs`, `.git` |
 | CORS | Loopback origins only — **not** reflect-any-origin + `AllowCredentials` |
 
-Empty `Security:ApiKey` disables CmApi API-key checks (dev / before first install). After `install.bat`, a key is always present.
+There is **no** `X-Api-Key` / `Security:ApiKey`. Security model is loopback OSSI bridge + IIS lockdown (hidden segments, restrict who can reach the site).
 
 ---
 
@@ -147,7 +146,7 @@ Empty `Security:ApiKey` disables CmApi API-key checks (dev / before first instal
 
 - Commands are **list / display / status** only.  
 - Do not store the CM password under the web root.  
-- Do not commit `config.local.js` or `data_live\cm_api_key.txt`.  
+- Do not commit `data_live\`.  
 - Only CDR is written as call logs. Do not log OSSI sessions.
 
 ---
@@ -171,14 +170,13 @@ Empty `Security:ApiKey` disables CmApi API-key checks (dev / before first instal
 
 ```text
 index.html  style.css  app.js  http.js  *-ui.js   UI
-config.local.js                         install-generated API key (gitignored)
 map/                                    sites + offline tiles
 python/ossi_service.py  *_parse.py      one OSSI process
 python/wheels/                          offline pip (3.11/3.12)
 vendor/avaya-ossi/                      SSH / OSSI client
 cdr-link/                               CDR logger
 api/                                    published CmApi
-data_live/                              runtime JSON + cm_api_key.txt (not in git)
+data_live/                              runtime JSON (not in git)
 scripts/install.bat   scripts/install.ps1
 ```
 
