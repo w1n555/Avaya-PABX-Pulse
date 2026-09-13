@@ -31,6 +31,7 @@ $cfgPath = "C:\inetpub\wwwroot\CM\api\appsettings.json"
   "AllowedHosts": "*",
   "OssiBridge": {
     "BaseUrl": "http://127.0.0.1:$PORT",
+    "Bind": "127.0.0.1",
     "SiteRoot": "C:\\inetpub\\wwwroot\\CM",
     "DataDir": "C:\\inetpub\\wwwroot\\CM\\data_live",
     "OssiSrc": "C:\\inetpub\\wwwroot\\CM\\vendor\\avaya-ossi\\src",
@@ -42,7 +43,7 @@ L "appsettings BaseUrl :$PORT"
 
 $p = Start-Process -FilePath $py -ArgumentList @(
   "C:\inetpub\wwwroot\CM\python\ossi_service.py",
-  "--host", "0.0.0.0",
+  "--host", "127.0.0.1",
   "--port", "$PORT",
   "--data-dir", "C:\inetpub\wwwroot\CM\data_live"
 ) -WorkingDirectory "C:\inetpub\wwwroot\CM\python" -WindowStyle Hidden -PassThru

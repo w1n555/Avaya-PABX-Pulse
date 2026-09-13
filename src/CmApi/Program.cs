@@ -20,13 +20,19 @@ builder.Services.ConfigureHttpJsonOptions(o =>
 {
     o.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
 });
+// Same-origin UI (/CM + /CM/api) does not need reflect-any-origin + credentials.
+// Narrow CORS: loopback tooling only; no AllowCredentials wide-open.
 builder.Services.AddCors(o =>
 {
     o.AddDefaultPolicy(p => p
         .AllowAnyHeader()
         .AllowAnyMethod()
-        .SetIsOriginAllowed(_ => true)
-        .AllowCredentials());
+        .SetIsOriginAllowed(static origin =>
+        {
+            if (string.IsNullOrWhiteSpace(origin)) return false;
+            if (!Uri.TryCreate(origin, UriKind.Absolute, out var u)) return false;
+            return u.IsLoopback;
+        }));
 });
 
 builder.WebHost.UseIIS();
@@ -34,6 +40,45 @@ builder.WebHost.UseIISIntegration();
 
 var app = builder.Build();
 app.UseCors();
+
+// Minimal shared-secret for mutating / session routes (install.ps1 → Security:ApiKey).
+// Empty key = auth disabled (dev / pre-install). GET health/reads stay open when key set.
+{
+    var apiKey = (app.Configuration["Security:ApiKey"] ?? "").Trim();
+    if (!string.IsNullOrEmpty(apiKey))
+    {
+        app.Use(async (ctx, next) =>
+        {
+            var method = ctx.Request.Method;
+            var mutating = HttpMethods.IsPost(method)
+                           || HttpMethods.IsPut(method)
+                           || HttpMethods.IsDelete(method)
+                           || HttpMethods.IsPatch(method);
+            if (!mutating)
+            {
+                await next();
+                return;
+            }
+
+            string? provided = ctx.Request.Headers["X-Api-Key"].FirstOrDefault();
+            if (string.IsNullOrEmpty(provided))
+            {
+                var auth = ctx.Request.Headers.Authorization.FirstOrDefault();
+                if (!string.IsNullOrEmpty(auth) && auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                    provided = auth["Bearer ".Length..].Trim();
+            }
+
+            if (!string.Equals(provided, apiKey, StringComparison.Ordinal))
+            {
+                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                await ctx.Response.WriteAsJsonAsync(new { ok = false, error = "Unauthorized: missing or invalid X-Api-Key" });
+                return;
+            }
+
+            await next();
+        });
+    }
+}
 
 // Resolve data dir relative to published api/ → site root data_live/
 var siteRoot = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, ".."));

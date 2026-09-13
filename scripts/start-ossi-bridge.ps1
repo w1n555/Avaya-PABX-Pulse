@@ -48,7 +48,7 @@ try {
 } catch { }
 
 Write-Host "Starting OSSI bridge with $py ..."
-$argList = @($Script, "--host", "0.0.0.0", "--port", "$Port", "--data-dir", $DataDir)
+$argList = @($Script, "--host", "127.0.0.1", "--port", "$Port", "--data-dir", $DataDir)
 Start-Process -FilePath $py -ArgumentList $argList -WorkingDirectory $WorkDir -WindowStyle Hidden
 Start-Sleep -Seconds 1
 try {

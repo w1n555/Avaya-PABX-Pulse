@@ -49,39 +49,82 @@ It does **not** replace Avaya System Manager or SAT for administration. It is th
 
 ## Install
 
-**You install yourself:** Windows **IIS**, **.NET 8 Hosting Bundle** (not the SDK), **Python 3.11 or 3.12** (Add to PATH). `install.bat` checks those three; if one is missing it tells you to install and re-run. Everything else is one-click.
+Production servers often have **no CDN**. Operators install prerequisites **manually**, then run the offline installer.
 
-**Get the files** (pick one):
+### 1. Manual prerequisites (you install these)
+
+| Prereq | Notes |
+|--------|--------|
+| **Windows IIS** | Windows Features → Internet Information Services (Management Console + WWW Services) |
+| **.NET 8 Hosting Bundle** | **Not** the SDK. [Download Hosting Bundle](https://dotnet.microsoft.com/download/dotnet/8.0) |
+| **Python 3.11 or 3.12** | Prefer **3.12**. Tick **Add python.exe to PATH**. **3.13+ is rejected** (offline wheels are cp311/cp312 ABI only) |
+
+`install.bat` **checks** Admin, IIS/`appcmd`, ANCM/Hosting Bundle, and Python 3.11\|3.12 **before** calling `install.ps1`. It does **not** winget/auto-download Hosting Bundle or Python.
+
+### 2. Get the files
 
 - `git clone https://github.com/w1n555/Avaya-PABX-Pulse.git` then copy/move into e.g. `C:\inetpub\wwwroot\CM`  
 - Or GitHub → **Releases** → download Source zip → extract to e.g. `C:\inetpub\wwwroot\CM`
 
-**OSSI packages (paramiko, etc.):** `python\wheels\` is in the repo. `install.bat` uses **system Python 3.11+** (prompts you to install if missing) and pip-installs from `python\wheels` (**no PyPI / no CDN**). No bundled `python.exe`.
+### 3. Offline Python packages
 
-Do **not** copy `data_live` from another PC unless you want the same monitored trunks. Copy `map\sites.json` only if you already have site pins.
+`python\wheels\` ships with the repo. Installer runs pip **offline**:
+
+```text
+pip install --no-index --find-links=python\wheels setuptools wheel paramiko python-dotenv
+pip install --no-index --no-build-isolation --find-links=python\wheels -e vendor\avaya-ossi
+```
+
+**No PyPI / no CDN** when `python\wheels` is present. No bundled `python.exe`.
+
+### 4. Run installer
 
 ```bat
 cd C:\inetpub\wwwroot\CM\scripts
 install.bat
 ```
 
-`install.bat` runs as Admin and bypasses Windows “running scripts is disabled”. Same as `powershell -ExecutionPolicy Bypass -File .\install.ps1`.
+(`install.bat` bypasses Windows script policy, then runs `install.ps1`.)
 
-1. Install **IIS** (Windows Features) yourself.  
-2. Put the app in a **subfolder** of the existing site (example: `C:\inetpub\wwwroot\CM`).  
-3. Run `install.bat` as Admin. Confirm the package root; IIS port default **8888**.  
-4. Open the URL it prints, typically `http://127.0.0.1:8888/CM/`.  
+**IIS modes**
+
+| Mode | Flag | Behaviour |
+|------|------|-----------|
+| **Nested** (default) | `-IisMode Nested` | Adds `/CM` + `/CM/api` under an **existing** IIS site/port. Does **not** replace the parent homepage. |
+| **Dedicated** | `-IisMode Dedicated -SitePort 8890` | New site on a **free** port that owns the whole site. |
+
+Typical Nested flow:
+
+1. IIS + Hosting Bundle + Python 3.12 already installed.  
+2. App in a subfolder (example: `C:\inetpub\wwwroot\CM`).  
+3. Run `install.bat` as Admin. Confirm package root; IIS port default **8888**.  
+4. Open `http://127.0.0.1:8888/CM/`.  
 5. Enter **your** CM Host + RO user + password → **Login**.
 
-The script does **not** install IIS and does **not** replace the parent site homepage. Nested mode only adds `/CM` and `/CM/api` on the existing IIS site/port.
+Same command **upgrades** an existing install (`git pull` if `.git` is present) and **keeps** `data_live\monitored_trunks.json` and `data_live\cm_api_key.txt`.
 
-Same command **upgrades** an existing install (`git pull` if `.git` is present) and **keeps** the monitored trunk list (`data_live\monitored_trunks.json`).
+Optional flags: `-SkipUpdate`, `-NonInteractive -RootPath "C:\path" -SitePort 8888`.  
+Full notes: `INSTALL.txt`.
 
-Optional flags: `-SkipDotNetInstall`, `-SkipPythonInstall`, `-SkipUpdate`, `-NonInteractive -RootPath "C:\path" -SitePort 8888`.  
-Dedicated site on a free port: `-IisMode Dedicated -SitePort 8890`.  
-Full installer notes: `INSTALL.txt`.
+Do **not** copy `data_live` from another PC unless you want the same monitored trunks / API key. Copy `map\sites.json` only if you already have site pins.
 
-You do **not** need a separate OSSI repo or to start the bridge by hand every day.
+You do **not** need a separate OSSI repo or to start the bridge by hand every day. The bridge binds **127.0.0.1:18776** and auto-starts at **Windows startup** (scheduled task `CM-NOC-OSSI-Bridge` as **SYSTEM**). CmApi can also start it on Login via `EnsureBridgeRunningAsync`.
+
+---
+
+## Security (defaults)
+
+| Item | Default |
+|------|---------|
+| OSSI bridge bind | **127.0.0.1:18776** (loopback only; not `0.0.0.0`) |
+| CmApi → bridge | `http://127.0.0.1:18776` |
+| API key | Generated at install → `data_live\cm_api_key.txt` + `Security:ApiKey` in `api\appsettings.json` + `config.local.js` for the UI |
+| Mutating CmApi routes | Require header **`X-Api-Key`** (session connect/disconnect/heartbeat, refresh, monitored write, …). GET health/reads stay open. |
+| Bridge HTTP | Loopback mandatory; same key enforced on POST/PUT when the key file exists |
+| IIS hidden segments | `src`, `scripts`, `python`, `data_live`, `cdr-link`, `vendor`, `docs`, `.git` |
+| CORS | Loopback origins only — **not** reflect-any-origin + `AllowCredentials` |
+
+Empty `Security:ApiKey` disables CmApi API-key checks (dev / before first install). After `install.bat`, a key is always present.
 
 ---
 
@@ -90,13 +133,13 @@ You do **not** need a separate OSSI repo or to start the bridge by hand every da
 | Item | Default / rule |
 |------|----------------|
 | IIS path | Nested `/CM` on your existing site port (often **8888**) |
-| OSSI | SSH **:5022**, terminal **ossit**, one session, bind **0.0.0.0:18776** |
+| OSSI | SSH **:5022**, terminal **ossit**, one session, bind **127.0.0.1:18776** |
 | CM login | Read-only account (e.g. `monitor`). Password stays in **bridge memory only** — never a file under wwwroot |
 | Auto pack | **90 seconds**, monitored trunks only |
 | Close tab | OSSI logoff after about **5 minutes** (frees the CM login slot) |
 | CM idle | **30 minutes** with no command (heartbeat + 90s pack keep it alive while the UI is open) |
 | Heartbeat | Browser every **15s** (keepalive only) |
-| CDR | TCP **:9000** → `cdr-link/cdr/YYYYMMDD.TXT`. Not OSSI |
+| CDR | TCP **:9000** → `cdr-link/cdr/YYYYMMDD.TXT`. Not OSSI. Logger may bind `0.0.0.0` to receive from CM |
 | Map sites | `map/sites.json` (edit coordinates / names; do not invent sites) |
 | Monitored trunks | Saved on the server (`data_live` / install data). Notes can also be local |
 
@@ -104,6 +147,7 @@ You do **not** need a separate OSSI repo or to start the bridge by hand every da
 
 - Commands are **list / display / status** only.  
 - Do not store the CM password under the web root.  
+- Do not commit `config.local.js` or `data_live\cm_api_key.txt`.  
 - Only CDR is written as call logs. Do not log OSSI sessions.
 
 ---
@@ -127,13 +171,15 @@ You do **not** need a separate OSSI repo or to start the bridge by hand every da
 
 ```text
 index.html  style.css  app.js  http.js  *-ui.js   UI
+config.local.js                         install-generated API key (gitignored)
 map/                                    sites + offline tiles
 python/ossi_service.py  *_parse.py      one OSSI process
+python/wheels/                          offline pip (3.11/3.12)
 vendor/avaya-ossi/                      SSH / OSSI client
 cdr-link/                               CDR logger
 api/                                    published CmApi
-data_live/                              runtime JSON (not in git)
-scripts/install.bat   scripts/install.ps1   (upgrade = same bat)
+data_live/                              runtime JSON + cm_api_key.txt (not in git)
+scripts/install.bat   scripts/install.ps1
 ```
 
 ---

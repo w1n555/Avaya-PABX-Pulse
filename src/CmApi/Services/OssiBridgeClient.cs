@@ -27,6 +27,7 @@ public sealed class OssiBridgeClient
     private readonly string _logDir;
     private readonly string _bridgeListenHost;
     private readonly int _bridgeListenPort;
+    private readonly string? _apiKey;
     private readonly SemaphoreSlim _startLock = new(1, 1);
 
     public OssiBridgeClient(IConfiguration config, ILogger<OssiBridgeClient> log)
@@ -64,10 +65,22 @@ public sealed class OssiBridgeClient
             _pythonExe = FindPythonWithAvayaOssi();
 
         var bridgeUri = new Uri(baseUrl.TrimEnd('/') + "/");
-        // Bind is the listen address (0.0.0.0). BaseUrl stays loopback for CmApi → bridge HTTP.
-        var bind = (config["OssiBridge:Bind"] ?? "0.0.0.0").Trim();
-        _bridgeListenHost = string.IsNullOrWhiteSpace(bind) ? "0.0.0.0" : bind;
+        // Bind is the listen address (loopback by default). BaseUrl stays 127.0.0.1 for CmApi → bridge HTTP.
+        var bind = (config["OssiBridge:Bind"] ?? "127.0.0.1").Trim();
+        _bridgeListenHost = string.IsNullOrWhiteSpace(bind) ? "127.0.0.1" : bind;
         _bridgeListenPort = bridgeUri.IsDefaultPort ? 18776 : bridgeUri.Port;
+
+        _apiKey = (config["Security:ApiKey"] ?? "").Trim();
+        if (string.IsNullOrEmpty(_apiKey))
+        {
+            try
+            {
+                var keyFile = Path.Combine(_dataDir, "cm_api_key.txt");
+                if (File.Exists(keyFile))
+                    _apiKey = File.ReadAllText(keyFile).Trim();
+            }
+            catch { /* optional */ }
+        }
 
         _http = new HttpClient
         {
@@ -75,6 +88,8 @@ public sealed class OssiBridgeClient
             // list extension can take 30–120s; keep headroom over IIS proxy
             Timeout = TimeSpan.FromMinutes(10),
         };
+        if (!string.IsNullOrEmpty(_apiKey))
+            _http.DefaultRequestHeaders.TryAddWithoutValidation("X-Api-Key", _apiKey);
 
         _log.LogInformation(
             "OssiBridge python={Python} scriptDir={Dir} listen={Host}:{Port}",
@@ -90,13 +105,12 @@ public sealed class OssiBridgeClient
         };
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        foreach (var ver in new[] { "Python313", "Python312", "Python311" })
+        foreach (var ver in new[] { "Python312", "Python311" })
         {
             list.Add(Path.Combine(local, "Programs", "Python", ver, "python.exe"));
             list.Add(Path.Combine(pf, ver, "python.exe"));
         }
         // Common AllUsers silent-install layouts
-        list.Add(@"C:\Python313\python.exe");
         list.Add(@"C:\Python312\python.exe");
         list.Add(@"C:\Python311\python.exe");
         try

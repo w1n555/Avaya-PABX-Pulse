@@ -1,0 +1,4 @@
+/* Copied to config.local.js by install.ps1 — do not commit secrets.
+ * Frontend sends this as X-Api-Key on mutating CmApi routes.
+ */
+window.__PULSE_API_KEY__ = "REPLACE_WITH_INSTALL_GENERATED_KEY";

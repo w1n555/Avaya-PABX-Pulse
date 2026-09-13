@@ -45,3 +45,6 @@ vendor/avaya-ossi/**/*.egg-info/
 scripts/start-bridge-18766.*
 scripts/start-bridge-18767.*
 
+
+# Install-generated client secret (do not commit)
+config.local.js

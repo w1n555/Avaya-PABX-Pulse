@@ -3,7 +3,7 @@
 OSSI bridge for Avaya PABX Pulse (read-only list/display/status).
 
 Package: vendor/avaya-ossi (AVAYA-OSSI-2026).
-Default bind 0.0.0.0:18776, data dir data_live/. One SSH session, one lock.
+Default bind 127.0.0.1:18776, data dir data_live/. One SSH session, one lock.
 Password stays in process memory only.
 
 Main JSON routes (CmApi proxies these):
@@ -2068,6 +2068,34 @@ def alarms_public() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+
+def _load_bridge_api_key() -> str:
+    """Optional shared secret (same file as CmApi install). Loopback is mandatory; key preferred."""
+    import os
+    env = (os.environ.get("PULSE_API_KEY") or "").strip()
+    if env:
+        return env
+    try:
+        key_path = PATHS.data_dir / "cm_api_key.txt"
+        if key_path.is_file():
+            return key_path.read_text(encoding="utf-8").strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _bridge_api_key_ok(handler: "Handler") -> bool:
+    expected = _load_bridge_api_key()
+    if not expected:
+        return True  # not configured — rely on loopback bind
+    provided = (handler.headers.get("X-Api-Key") or "").strip()
+    if not provided:
+        auth = (handler.headers.get("Authorization") or "").strip()
+        if auth.lower().startswith("bearer "):
+            provided = auth[7:].strip()
+    return provided == expected
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "OssiBridge/1.0"
 
@@ -2081,9 +2109,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        # Bridge is loopback-only for CmApi; no reflect-any-origin.
+        self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1")
         self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Api-Key, Authorization")
         self.end_headers()
         self.wfile.write(body)
 
@@ -2135,9 +2164,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self) -> None:  # noqa: N802
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1")
         self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Api-Key, Authorization")
         self.end_headers()
 
     def do_GET(self) -> None:  # noqa: N802
@@ -2362,6 +2391,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path.rstrip("/") or "/"
+        if not _bridge_api_key_ok(self):
+            self._send(401, {"ok": False, "error": "Unauthorized: missing or invalid X-Api-Key"})
+            return
         body = self._read_json()
         try:
             if path == "/session/connect":
@@ -2562,6 +2594,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PUT(self) -> None:  # noqa: N802
         path = urlparse(self.path).path.rstrip("/") or "/"
+        if not _bridge_api_key_ok(self):
+            self._send(401, {"ok": False, "error": "Unauthorized: missing or invalid X-Api-Key"})
+            return
         body = self._read_json()
         try:
             if path == "/monitored":
@@ -2655,7 +2690,7 @@ def _health_already_up(host: str, port: int) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="OSSI bridge for CM NOC")
-    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18776)
     parser.add_argument("--data-dir", default=str(PATHS.data_dir))
     args = parser.parse_args()
