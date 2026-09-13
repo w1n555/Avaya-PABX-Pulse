@@ -352,6 +352,9 @@ function Repair-VenvHome([string]$root, [string]$basePython) {
 }
 
 function Ensure-PythonVenv([string]$root, [string]$basePython) {
+    # Always return ONLY the canonical path. Native pip writes to the success
+    # stream; if captured into $venvPy = Ensure-PythonVenv ..., Test-Path breaks
+    # (seen as "Missing venv python: Looking in links: ...").
     $venvPy = Join-Path $root 'python\.venv\Scripts\python.exe'
     $vendor = Join-Path $root 'vendor\avaya-ossi'
     if (-not (Test-Path $vendor)) {
@@ -359,14 +362,14 @@ function Ensure-PythonVenv([string]$root, [string]$basePython) {
     }
     if (-not (Test-Path $venvPy)) {
         Write-Info 'Creating Python venv under site (first time)...'
-        & $basePython -m venv (Join-Path $root 'python\.venv')
+        & $basePython -m venv (Join-Path $root 'python\.venv') 2>&1 | ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -ne 0) { throw 'python -m venv failed' }
     }
     Repair-VenvHome -root $root -basePython $basePython
     Write-Info "Checking venv import: $venvPy"
     if (Test-AvayaOssiImport -py $venvPy -root $root) {
         Write-Ok "Python OSSI ready (existing venv): $venvPy"
-        return ,$venvPy
+        return $venvPy
     }
     $wheelDir = Join-Path $root 'python\wheels'
     $whl = @()
@@ -375,28 +378,28 @@ function Ensure-PythonVenv([string]$root, [string]$basePython) {
     }
     if ($whl.Count -gt 0) {
         Write-Info ("Installing paramiko from {0} wheel file(s) (offline, no PyPI)..." -f $whl.Count)
-        & $venvPy -m pip install --no-index --find-links $wheelDir setuptools wheel paramiko python-dotenv
+        & $venvPy -m pip install --no-index --find-links $wheelDir setuptools wheel paramiko python-dotenv 2>&1 | ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -ne 0) {
             throw "Offline pip failed (setuptools/paramiko). Copy python\wheels\*.whl from Pulse v1.0.4 zip into $wheelDir"
         }
-        & $venvPy -m pip install --no-index --no-build-isolation --find-links $wheelDir -e $vendor
+        & $venvPy -m pip install --no-index --no-build-isolation --find-links $wheelDir -e $vendor 2>&1 | ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -ne 0) {
             throw "Offline pip of vendor\avaya-ossi failed. Need setuptools wheel in python\wheels."
         }
         if (Test-AvayaOssiImport -py $venvPy -root $root) {
             Write-Ok "Python OSSI ready (wheels): $venvPy"
-            return ,$venvPy
+            return $venvPy
         }
         throw "Wheels installed but import avaya_ossi/paramiko failed. Recreate python\.venv and re-run."
     }
     Write-Warn "python\wheels has no .whl files (need v1.0.4 package). Trying PyPI (needs internet)..."
-    & $venvPy -m pip install --no-build-isolation -e $vendor
+    & $venvPy -m pip install --no-build-isolation -e $vendor 2>&1 | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) {
         throw "No python\wheels and PyPI unreachable. Copy python\wheels from v1.0.4 zip, then re-run install.bat."
     }
     if (Test-AvayaOssiImport -py $venvPy -root $root) {
         Write-Ok "Python OSSI ready: $venvPy"
-        return ,$venvPy
+        return $venvPy
     }
     throw 'Could not import paramiko. Copy python\wheels from the Pulse zip (v1.0.4+).'
 }
@@ -993,7 +996,10 @@ try {
     if (-not $basePy) { throw "Python 3.11/3.12 still not found." }
     Write-Ok "System Python: $basePy"
     Write-Info "Preparing site venv (python\.venv) from that interpreter..."
-    $venvPy = Ensure-PythonVenv -root $root -basePython $basePy
+    $venvPyExpected = Join-Path $root 'python\.venv\Scripts\python.exe'
+    $venvPy = Ensure-PythonVenv -root $root -basePython $basePy | Select-Object -Last 1
+    if (-not $venvPy -or -not (Test-Path -LiteralPath "$venvPy")) { $venvPy = $venvPyExpected }
+    if (-not (Test-Path -LiteralPath "$venvPy")) { throw "Missing venv python after Ensure-PythonVenv: $venvPyExpected" }
     Write-Ok "Bridge will run: $venvPy"
 
     Ensure-ApiPublish -root $root
