@@ -18,6 +18,8 @@ Step 0 — Manual prerequisites (you install)
 ----------------------------------------------------------------
 Step 1 — Extract package
 ----------------------------------------------------------------
+  Preferred: download Avaya-PABX-Pulse-vX.Y.Z.zip from GitHub Releases
+  (deploy tree), not only the auto "Source code" zip.
   Extract / clone to ANY folder (example only: C:\inetpub\wwwroot\CM).
 
 ----------------------------------------------------------------
@@ -34,6 +36,8 @@ Step 2 — Run installer as Administrator
 
   Confirm ROOT path when asked (default = package folder).
   Confirm existing IIS PORT (Nested default, often 8888).
+  Nested needs an IIS site ALREADY bound to that port. If none exists,
+  create a parent site first, or use: install.ps1 -IisMode Dedicated -SitePort <free>.
 
 ----------------------------------------------------------------
 What install.ps1 does (and does NOT do)

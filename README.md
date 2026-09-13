@@ -63,8 +63,9 @@ Production servers often have **no CDN**. Operators install prerequisites **manu
 
 ### 2. Get the files
 
-- `git clone https://github.com/w1n555/Avaya-PABX-Pulse.git` then copy/move into e.g. `C:\inetpub\wwwroot\CM`  
-- Or GitHub → **Releases** → download Source zip → extract to e.g. `C:\inetpub\wwwroot\CM`
+- **Preferred:** GitHub → **[Releases](https://github.com/w1n555/Avaya-PABX-Pulse/releases)** → download **`Avaya-PABX-Pulse-vX.Y.Z.zip`** (deploy tree) → extract to e.g. `C:\inetpub\wwwroot\CM`  
+- Or `git clone https://github.com/w1n555/Avaya-PABX-Pulse.git` then copy/move into that folder  
+- Avoid relying on the auto-generated **Source code** zip alone when a named deploy zip is attached to the release
 
 ### 3. Offline Python packages
 
@@ -90,16 +91,17 @@ install.bat
 
 | Mode | Flag | Behaviour |
 |------|------|-----------|
-| **Nested** (default) | `-IisMode Nested` | Adds `/CM` + `/CM/api` under an **existing** IIS site/port. Does **not** replace the parent homepage. |
-| **Dedicated** | `-IisMode Dedicated -SitePort 8890` | New site on a **free** port that owns the whole site. |
+| **Nested** (default) | `-IisMode Nested` | Adds `/CM` + `/CM/api` under an **existing** IIS site on that port. Does **not** replace the parent homepage. **Requires a parent site already bound to the port** (e.g. something already listening on **8888**). |
+| **Dedicated** | `-IisMode Dedicated -SitePort <free>` | New site that owns the whole port (only if you intentionally want a free port, not shared with another product). |
 
 Typical Nested flow:
 
 1. IIS + Hosting Bundle + Python 3.12 already installed.  
-2. App in a subfolder (example: `C:\inetpub\wwwroot\CM`).  
-3. Run `install.bat` as Admin. Confirm package root; IIS port default **8888**.  
-4. Open `http://127.0.0.1:8888/CM/`.  
-5. Enter **your** CM Host + RO user + password → **Login**.
+2. An IIS site already exists on the target port (often **8888**). If that port has **no** site yet, create one first, or use Dedicated on a free port.  
+3. App in a subfolder (example: `C:\inetpub\wwwroot\CM`).  
+4. Run `install.bat` as Admin. Confirm package root; IIS port default **8888**.  
+5. Open `http://127.0.0.1:8888/CM/`.  
+6. Enter **your** CM Host + RO user + password → **Login**.
 
 Same command **upgrades** an existing install (`git pull` if `.git` is present) and **keeps** `data_live\monitored_trunks.json`.
 
