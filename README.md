@@ -122,7 +122,7 @@ You do **not** need a separate OSSI repo or to start the bridge by hand every da
 | CmApi → bridge | `http://127.0.0.1:18776` |
 | Bridge HTTP | Loopback only — no shared API key; rely on bind + host firewall |
 | IIS exposure | Restrict / firewall the IIS site; do not expose Pulse broadly without network controls |
-| IIS hidden segments | `src`, `scripts`, `python`, `data_live`, `cdr-link`, `vendor`, `docs`, `.git` |
+| IIS hidden segments | `src`, `scripts`, `python`, `data_live`, `cdr-link`, `avaya-ossi`, `docs`, `.git` |
 | CORS | Loopback origins only — **not** reflect-any-origin + `AllowCredentials` |
 
 There is **no** `X-Api-Key` / `Security:ApiKey`. Security model is loopback OSSI bridge + IIS lockdown (hidden segments, restrict who can reach the site).

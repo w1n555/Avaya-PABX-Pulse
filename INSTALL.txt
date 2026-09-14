@@ -79,7 +79,7 @@ Security defaults
   - Bridge: 127.0.0.1:18776 (loopback only; no API key)
   - CmApi BaseUrl: http://127.0.0.1:18776
   - Restrict / firewall IIS exposure (operators)
-  - web.config hides: src, scripts, python, data_live, cdr-link, vendor, docs, .git
+  - web.config hides: src, scripts, python, data_live, cdr-link, avaya-ossi, docs, .git
   - Do not commit data_live\
 
 ----------------------------------------------------------------
